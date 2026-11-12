@@ -18,7 +18,7 @@ import urllib.request
 from version import REPO, VERSION
 
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
-EVERY = 6 * 3600
+EVERY = 3600                     # check every hour
 UA = {"User-Agent": "Nook-updater", "Accept": "application/vnd.github+json"}
 
 
@@ -91,7 +91,7 @@ class Updater:
                 h.update(chunk)
         return h.hexdigest()
 
-    def loop(self, first=60):
+    def loop(self, first=5):
         time.sleep(first)
         while True:
             self.check()

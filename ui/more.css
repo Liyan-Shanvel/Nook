@@ -145,6 +145,9 @@ button.sq:hover{box-shadow:0 0 0 1.5px rgba(255,255,255,.5) inset}
 .sndlist button:hover{background:rgba(255,255,255,.06);color:#fff}
 .sndlist button.on{color:#fff;font-weight:600}
 .card .btns{margin-top:22px}
+#ask{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding-top:140px;background:rgba(0,0,0,.45);animation:lensIn .15s ease-out}
+#ask .card{width:340px}#ask p{font-size:14px;line-height:1.5}
+#ask .btn.main.bad{background:#e5484d;color:#fff}
 .danger{font-size:12px;color:var(--fg3);margin-top:14px;text-decoration:underline;text-underline-offset:3px}
 .danger:hover{color:#fff}
 .set{display:flex;align-items:center;min-height:48px;border-top:1px solid var(--line);font-size:14px;gap:12px}

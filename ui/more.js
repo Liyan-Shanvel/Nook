@@ -338,7 +338,7 @@ const MORE_ACT = {
   hpause: async () => { const h = S.d.habit; await call('update_habit', h.id, { paused: !h.paused }); load(); },
   hdel: async () => {
     const h = S.d.habit;
-    if (!confirm(`Delete "${h.title}" and all its ticks?`)) return;
+    if (!(await ask(`Delete "${h.title}" and all its ticks?`))) return;
     await call('delete_habit', h.id); S.habit = null; load();
   },
   mday: el => {
@@ -353,7 +353,7 @@ const MORE_ACT = {
   },
   mmode: el => { S.modal.mode = el.dataset.v; renderModal(); },
   mdelgoal: async () => {
-    if (!confirm(`Delete the goal "${S.modal.title}"? Tasks and habits stay, they just stop pointing at it.`)) return;
+    if (!(await ask(`Delete the goal "${S.modal.title}"? Tasks and habits stay, they just stop pointing at it.`))) return;
     await call('delete_goal', S.modal.id); closeModal(); load();
   },
   mclose: () => closeModal(),
@@ -372,7 +372,7 @@ const MORE_ACT = {
     S.settings = await call('set_setting', k, !S.settings[k]); renderModal();
   },
   signout: async () => {
-    if (!confirm('Sign out of Nook? Your tasks stay on this PC.')) return;
+    if (!(await ask('Sign out of Nook? Your tasks stay on this PC.', 'Sign out', false))) return;
     await call('sign_out'); location.reload();
   },
   gconnect: async () => {
@@ -438,9 +438,22 @@ document.addEventListener('contextmenu', e => {
   S.menu = t.id;
 });
 document.addEventListener('mousedown', e => { if (S.menu && !e.target.closest('#menu')) closeMenu(); }, true);
+/* in-app yes/no, instead of the browser's confirm() box. Resolves true only on the main button. */
+function ask(text, yes = 'Delete', bad = true) {
+  if (S.ask) S.ask(false);
+  return new Promise(done => {
+    const box = document.createElement('div'); box.id = 'ask';
+    box.innerHTML = `<div class="card"><p></p><div class="btns"><button class="btn" data-a="0">Cancel</button><button class="btn main ${bad ? 'bad' : ''}" data-a="1"></button></div></div>`;
+    box.querySelector('p').textContent = text; box.querySelector('[data-a="1"]').textContent = yes;
+    const end = v => { S.ask = null; box.remove(); done(v); };
+    S.ask = end;
+    box.addEventListener('click', e => { e.stopPropagation(); const b = e.target.closest('[data-a]'); if (b) end(b.dataset.a === '1'); else if (e.target === box) end(false); });
+    document.body.appendChild(box); box.querySelector('[data-a="1"]').focus();
+  });
+}
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (S.menu) { e.stopPropagation(); closeMenu(); } else if (S.modal) { e.stopPropagation(); closeModal(); }
+  if (S.ask) { e.stopPropagation(); S.ask(false); } else if (S.menu) { e.stopPropagation(); closeMenu(); } else if (S.modal) { e.stopPropagation(); closeModal(); }
 }, true);
 
 /* ---------- account: sign-in screen + settings rows ---------- */

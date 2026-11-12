@@ -1,6 +1,6 @@
 ; Nook installer. Build: build\build.ps1 (or ISCC build\installer.iss after PyInstaller).
 ; Per-user install: no admin prompt, lives in %LOCALAPPDATA%\Programs\Nook, data in %LOCALAPPDATA%\FocusOS.
-; The app was called FocusOS before 1.1.1. AppId, AppMutex and the data folder keep the old name on purpose,
+; The app was called FocusOS before 1.1.1. AppId and the data folder keep the old name on purpose,
 ; so an old install upgrades in place (same folder, same data) instead of becoming a second app.
 
 #define AppName "Nook"
@@ -28,7 +28,8 @@ UninstallDisplayName={#AppName}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-AppMutex=FocusOS_App_Mutex
+; no AppMutex: a silent self-update starts while Nook is still closing, and the mutex check made it quit
+; ("Nook is running" -> Cancel). PrepareToInstall below closes Nook instead.
 CloseApplications=force
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible

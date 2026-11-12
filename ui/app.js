@@ -526,7 +526,7 @@ const ACT = {
   untime: async el => { S.sel = null; await call('update_task', Number(el.dataset.id), { start_min: null, end_min: null }); load(); },
   del: async el => {
     const x = findTask(el.dataset.id);
-    if (!x || !confirm(`Delete "${x.title}"?`)) return;
+    if (!x || !(await ask(`Delete "${x.title}"?`))) return;
     await call('delete_task', x.id); load();
   },
   go: async () => { await call(S.timer.running ? 'timer_pause' : 'timer_start'); load(); },

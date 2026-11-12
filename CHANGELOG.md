@@ -2,6 +2,12 @@
 
 All notable changes to Nook. Newest first.
 
+## 1.1.5 (2026-11-12)
+
+- Fixed: "Restart now" did not update. The installer saw Nook still closing and gave up.
+- Updates are found 5 seconds after Nook opens, then every hour.
+- Delete and sign-out now ask in Nook's own popup instead of the browser box.
+
 ## 1.1.4 (2026-11-12)
 
 - First public release.
