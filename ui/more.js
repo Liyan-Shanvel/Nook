@@ -247,6 +247,10 @@ function renderModal() {
       <div class="f"><label>By (optional)</label><input data-k="deadline" type="date" value="${esc(m.deadline || '')}"></div>
       <div class="btns"><button class="btn" data-act="mclose">Cancel</button><button class="btn main" data-act="msave">${m.id ? 'Save' : 'Add goal'}</button></div>
       ${m.id ? '<button class="danger" data-act="mdelgoal">Delete this goal</button>' : ''}`;
+  } else if (m.kind === 'update') {
+    h = `<h2>Nook ${esc((S.upd && S.upd.latest) || '')} is ready</h2>
+      <div class="help">Nook restarts in a few seconds with the new version. Your tasks and settings stay as they are.</div>
+      <div class="btns"><button class="btn" data-act="mclose">Later</button><button class="btn main" data-act="update">Restart now</button></div>`;
   } else if (m.kind === 'settings') {
     const st = S.settings;
     const stepper = (k, label, fmt) => `<div class="set"><span>${label}</span><div class="stepper"><button data-act="sstep" data-k="${k}" data-v="-1">−</button><b>${fmt(st[k])}</b><button data-act="sstep" data-k="${k}" data-v="1">+</button></div></div>`;

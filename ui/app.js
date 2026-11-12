@@ -69,6 +69,7 @@ async function load() {
   S.timer = S.d.timer;
   if (S.d.settings) S.settings = S.d.settings;
   S.upd = await call('update_status').catch(() => S.upd);
+  if (S.upd && S.upd.ready && !S.modal && S.updAsked !== S.upd.latest) { S.updAsked = S.upd.latest; openModal({ kind: 'update' }); }   // ask once per version
   if (S.d.today) {
     if (S.today && S.d.today !== S.today && S.date === S.today) S.date = S.d.today;   // midnight passed
     S.today = S.d.today;
