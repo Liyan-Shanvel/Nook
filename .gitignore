@@ -1,0 +1,23 @@
+# secrets: never in git (build reads them from disk)
+google_client.json
+google_token.json
+.env
+*.env
+
+# personal data and local databases
+data/
+*.db
+*.db-journal
+
+# build output
+dist/
+.build-tmp/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# scratch / unused design files
+design/sounds-preview/
+design/unused/
+
+sounds/incoming/

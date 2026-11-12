@@ -1,0 +1,420 @@
+"""Nook - Focus & Productivity Tool (was FocusOS). Run: pythonw app.py  (or the installed Nook.exe).
+One process: the window, the taskbar bar, the tray icon, app tracking and the Google Calendar sync.
+Flags: --hidden (start without the window, used by Start with Windows)."""
+import ctypes
+import os
+import sys
+import threading
+import time
+import traceback
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+FROZEN = getattr(sys, "frozen", False)
+RES = getattr(sys, "_MEIPASS", HERE)          # ui/, icon and the Google sign-in key ship here
+sys.path.insert(0, HERE)
+from store import Store  # noqa: E402
+import tracker  # noqa: E402
+import account  # noqa: E402
+import sounds  # noqa: E402
+import updater  # noqa: E402
+from version import VERSION  # noqa: E402
+
+account.CLIENT = os.path.join(RES, "google_client.json")
+# each Windows user's own data, never inside the install folder
+DATA = os.environ.get("FOCUSOS_DATA") or os.path.join(os.environ.get("LOCALAPPDATA", HERE), "FocusOS")
+OLD_DATA = os.path.join(HERE, "data")         # where the dev copy kept it before 2026-11-11
+LOG = os.path.join(DATA, "error.log")
+ICON = os.path.join(RES, "build", "focusos.ico") if not FROZEN else os.path.join(RES, "focusos.ico")
+
+
+def log_error(where):
+    try:
+        with open(LOG, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {where}\n{traceback.format_exc()}\n")
+    except Exception:
+        pass
+
+
+class Api:
+    """Everything the screens can ask for. Names starting with _ are hidden from the page."""
+
+    def __init__(self, store, acct=None, upd=None):
+        self._s = store
+        self._acct = acct
+        self._upd = upd
+
+    # self-update (updater.py)
+    def update_status(self):
+        return self._upd.status() if self._upd else {"current": VERSION, "ready": False}
+
+    def update_now(self):
+        """Start the downloaded installer and close this app so it can be replaced."""
+        if not self._upd or not self._upd.install():
+            return False
+        threading.Timer(0.6, lambda: os._exit(0)).start()
+        return True
+
+    # Google account + calendar
+    def account_status(self):
+        return self._acct.status()
+
+    def skip_sign_in(self):
+        return self._acct.skip()
+
+    def sign_in(self):
+        return self._acct.sign_in()
+
+    def sign_out(self):
+        return self._acct.sign_out()
+
+    def sync_calendar(self):
+        self._acct.sync()
+        return self._acct.status()
+
+    def _timer(self):
+        return self._s.timer_state()            # the store plays the finish sound
+
+    # reads
+    def timer(self):
+        return self._timer()
+
+    def today_data(self):
+        s = self._s
+        d = s.today()
+        t = self._timer()
+        current = None
+        if t["task_id"]:
+            try:
+                current = s.task(t["task_id"])
+            except KeyError:
+                pass
+        return {"today": d, "tasks": s.tasks(d), "carry": s.carry(), "focused": s.focused(d),
+                "timer": t, "current": current, "settings": s.settings(), "goals": self._goal_names()}
+
+    def _goal_names(self):
+        return [{"id": r["id"], "title": r["title"]} for r in self._s._all("SELECT id,title FROM goal ORDER BY created, id")]
+
+    def day_data(self, day):
+        s = self._s
+        return {"today": s.today(), "day": day, "tasks": s.tasks(day), "meetings": s.meetings(day),
+                "lane": s.lane(day), "summary": s.summary(day), "focused": s.focused(day),
+                "timer": self._timer(), "settings": s.settings(), "goals": self._goal_names()}
+
+    def range_data(self, a, b):
+        s = self._s
+        return {"today": s.today(), "tasks": s.tasks(a, b), "meetings": s.meetings(a, b),
+                "focus": s.focus_by_day(a, b), "timer": self._timer(), "settings": s.settings()}
+
+    # writes
+    def add_task(self, title, day=None, start_min=None, end_min=None):
+        return self._s.add_task(title, day, start_min, end_min)
+
+    def update_task(self, tid, fields):
+        return self._s.update_task(int(tid), fields)
+
+    def delete_task(self, tid):
+        self._s.delete_task(int(tid))
+        return True
+
+    def move_to_today(self):
+        self._s.move_to_today()
+        return True
+
+    def timer_start(self, task_id=None, mode=None):
+        return self._s.timer_start(int(task_id) if task_id is not None else None, mode)
+
+    def timer_pause(self):
+        return self._s.timer_pause()
+
+    def timer_length(self, mins):
+        return self._s.timer_length(mins)
+
+    def timer_label(self, label):
+        return self._s.timer_label(label)
+
+    def timer_unlabel(self):
+        return self._s.timer_unlabel()
+
+    def sound_styles(self):
+        return [[k, v] for k, v in sounds.LIBRARY.items()]
+
+    def preview_sound(self, name, style):
+        sounds.play(name, style)
+        return True
+
+    def timer_reset(self):
+        return self._s.timer_reset()
+
+    def timer_dismiss(self):
+        return self._s.timer_dismiss()
+
+    def set_setting(self, k, v):
+        return self._s.set_setting(k, v)
+
+    # habits
+    def habits_data(self):
+        s = self._s
+        return {"today": s.today(), "habits": s.habits(), "goals": [{"id": g["id"], "title": g["title"]}
+                                                                      for g in s.goals()],
+                "focused": s.focused(s.today()), "settings": s.settings()}
+
+    def habit_detail(self, hid):
+        s = self._s
+        h = s.habit_detail(int(hid))
+        h["goal"] = s.goal(h["goal_id"])["title"] if h["goal_id"] else None
+        return {"today": s.today(), "habit": h, "focused": s.focused(s.today()), "settings": s.settings(),
+                "goals": [{"id": g["id"], "title": g["title"]} for g in s.goals()]}
+
+    def add_habit(self, title, days=None, goal_id=None):
+        return self._s.add_habit(title, days, goal_id)
+
+    def update_habit(self, hid, fields):
+        return self._s.update_habit(int(hid), fields)
+
+    def delete_habit(self, hid):
+        self._s.delete_habit(int(hid))
+        return True
+
+    def tick_habit(self, hid, day=None, on=True):
+        return self._s.tick_habit(int(hid), day, on)
+
+    # goals
+    def goals_data(self):
+        s = self._s
+        return {"today": s.today(), "goals": s.goals(), "focused": s.focused(s.today()), "settings": s.settings()}
+
+    def add_goal(self, title, target, unit="", deadline=None, mode="tasks"):
+        return self._s.add_goal(title, target, unit, deadline, mode)
+
+    def update_goal(self, gid, fields):
+        return self._s.update_goal(int(gid), fields)
+
+    def delete_goal(self, gid):
+        self._s.delete_goal(int(gid))
+        return True
+
+    # progress
+    def progress_data(self, a, b):
+        s = self._s
+        out = s.progress(a, b)
+        out.update({"focused": s.focused(s.today()), "settings": s.settings()})
+        return out
+
+    def year_data(self, y):
+        s = self._s
+        out = s.year(int(y))
+        out.update({"focused": s.focused(s.today()), "settings": s.settings()})
+        return out
+
+    # start with Windows (a shortcut in the user's Startup folder)
+    def autostart(self, on=None):
+        if on is None:
+            return os.path.exists(STARTUP_LNK)
+        if on:
+            make_startup_shortcut()
+        elif os.path.exists(STARTUP_LNK):
+            os.remove(STARTUP_LNK)
+        return os.path.exists(STARTUP_LNK)
+
+
+STARTUP_LNK = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup",
+                           "Nook.lnk")
+
+
+def launch_cmd():
+    """(program, arguments) that start this app: the installed exe, or pythonw + app.py from source."""
+    if FROZEN:
+        return sys.executable, ""
+    exe = sys.executable
+    if exe.lower().endswith("python.exe"):
+        exe = exe[:-len("python.exe")] + "pythonw.exe"
+    return exe, f'"{os.path.join(HERE, "app.py")}"'
+
+
+def make_startup_shortcut():
+    import subprocess
+    exe, args = launch_cmd()
+    q = lambda p: p.replace("'", "''")          # noqa: E731  PowerShell single-quote escape
+    ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{q(STARTUP_LNK)}');"
+          f"$s.TargetPath='{q(exe)}';$s.Arguments='{q((args + ' --hidden').strip())}';"
+          f"$s.WorkingDirectory='{q(os.path.dirname(exe) if FROZEN else HERE)}';"
+          f"$s.IconLocation='{q(exe if FROZEN else ICON)}';$s.Save()")
+    subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=True, capture_output=True,
+                   creationflags=0x08000000)
+
+
+def migrate_old_data():
+    """First run of the new layout: copy the dev copy's data (tasks, history, sign-in) into DATA once."""
+    import shutil
+    import sqlite3
+    os.makedirs(DATA, exist_ok=True)
+    new_db, old_db = os.path.join(DATA, "focusos.db"), os.path.join(OLD_DATA, "focusos.db")
+    if FROZEN or os.path.exists(new_db) or not os.path.exists(old_db):
+        return
+    src, dst = sqlite3.connect(old_db), sqlite3.connect(new_db)
+    with dst:
+        src.backup(dst)                         # consistent copy even if something has it open
+    src.close()
+    dst.close()
+    for name in ("google_token.json", "smarttrack.db", "smarttrack_rules.json"):
+        if os.path.exists(os.path.join(OLD_DATA, name)):
+            shutil.copy2(os.path.join(OLD_DATA, name), os.path.join(DATA, name))
+
+
+def track_loop(store, every=5, idle_after=120):
+    """Every 5 s: settle the timer, then note what is in front (unless away or tracking is off)."""
+    while True:
+        try:
+            t = store.timer_state()
+            st = store.settings()
+            if st["tracking"] and tracker.idle_seconds() < idle_after:
+                fg = tracker.foreground()
+                if fg and fg[0] and fg[0].lower() not in tracker.SKIP:
+                    app, cat = tracker.classify(fg[0], fg[1], st["rules"])
+                    label = app
+                    if t["running"] and t["mode"] == "focus" and t["task_id"] and cat != "distracted":
+                        try:
+                            label, cat = store.task(t["task_id"])["title"], "focus"
+                        except KeyError:
+                            pass
+                    elif t["running"] and t["mode"] == "focus" and t.get("label") and cat != "distracted":
+                        label, cat = t["label"], "focus"
+                    store.track_sample(app, label, cat)
+        except Exception:
+            log_error("track_loop")
+        time.sleep(every)
+
+
+SHOW_EVENT = "FocusOS_Show_Window"
+
+
+def main():
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    relaunches = next((int(a.split("=")[1]) for a in sys.argv if a.startswith("--relaunch=")), 0)
+    for _ in range(40 if relaunches else 1):    # a relaunch waits for the old copy to finish closing
+        h = kernel32.CreateMutexW(None, False, "FocusOS_App_Mutex")
+        taken = kernel32.GetLastError() == 183
+        if not taken:
+            break
+        kernel32.CloseHandle(h)
+        time.sleep(0.25)
+    if taken:                               # already running: bring that window up instead
+        ev = kernel32.OpenEventW(0x0002, False, SHOW_EVENT)       # EVENT_MODIFY_STATE
+        if ev:
+            kernel32.SetEvent(ev)
+        return
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LiyanShanvel.Nook")
+    migrate_old_data()
+    os.makedirs(DATA, exist_ok=True)
+    store = Store(os.path.join(DATA, "focusos.db"))
+    sounds.setup(DATA)
+    store.on_sound = sounds.play
+    acct = account.Account(store, DATA)
+    threading.Thread(target=track_loop, args=(store,), daemon=True).start()
+    threading.Thread(target=account.sync_loop, args=(acct,), daemon=True).start()
+    upd = updater.Updater(DATA, log_error)
+    if getattr(sys, "frozen", False):           # only the installed app updates itself, never a dev run
+        upd.start()
+
+    import webview
+    hidden = "--hidden" in sys.argv
+    win = webview.create_window("Nook", os.path.join(RES, "ui", "index.html"), js_api=Api(store, acct, upd),
+                                width=1320, height=860, min_size=(1100, 700), background_color="#161618",
+                                hidden=hidden)
+    state = {"quitting": False, "visible": not hidden}
+
+    def show():
+        try:
+            state["visible"] = True
+            win.show()
+            win.restore()
+            win.on_top = True
+            win.on_top = False
+        except Exception:
+            log_error("show")
+
+    def quit_app(*_):
+        state["quitting"] = True
+        try:
+            win.destroy()
+        finally:
+            os._exit(0)
+
+    def on_closing():
+        if state["quitting"]:
+            return True
+        state["visible"] = False
+        win.hide()                          # closing the window keeps Nook running in the tray
+        return False
+
+    win.events.closing += on_closing
+
+    def wait_show():
+        ev = kernel32.CreateEventW(None, False, False, SHOW_EVENT)
+        while True:
+            kernel32.WaitForSingleObject(ev, 0xFFFFFFFF)
+            show()
+
+    threading.Thread(target=wait_show, daemon=True).start()
+
+    def tray():
+        try:
+            import pystray
+            from PIL import Image
+            menu = pystray.Menu(pystray.MenuItem("Open Nook", lambda: show(), default=True),
+                                pystray.MenuItem("Quit Nook", quit_app))
+            pystray.Icon("Nook", Image.open(ICON), "Nook", menu).run()
+        except Exception:
+            log_error("tray")
+
+    threading.Thread(target=tray, daemon=True).start()
+
+    def bar_thread():
+        try:
+            import bar
+            bar.run(store, DATA, show)
+        except Exception:
+            log_error("bar")
+
+    threading.Thread(target=bar_thread, daemon=True).start()
+
+    def bar_watchdog(every=10, stale=60):
+        """The bar beats once a second. No beat for a minute = it is stuck, and a stuck Tk thread cannot be
+        restarted from outside, so start a fresh Nook and leave. At most 3 times in a row."""
+        import bar
+        import subprocess
+        last, strikes = time.monotonic(), 0
+        while True:
+            time.sleep(every)
+            now = time.monotonic()
+            woke = now - last > every * 3   # the PC slept: every clock jumped, that is not a stuck bar
+            last = now
+            strikes = strikes + 1 if (not woke and now - bar.HEART["at"] > stale) else 0
+            if strikes < 2:
+                continue
+            if relaunches >= 3:
+                if strikes == 2:
+                    log_error("bar stuck, relaunch limit reached")
+                continue
+            log_error(f"bar stuck (starts={bar.HEART['starts']}), relaunching")
+            exe, args = launch_cmd()
+            cmd = [exe] + ([args.strip('"')] if args else []) + [f"--relaunch={relaunches + 1}"]
+            if not state["visible"]:
+                cmd.append("--hidden")
+            subprocess.Popen(cmd, creationflags=0x08000000, close_fds=True)
+            os._exit(0)
+
+    threading.Thread(target=bar_watchdog, daemon=True).start()
+    webview.start(http_server=True)
+    os._exit(0)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        os.makedirs(DATA, exist_ok=True)
+        log_error("main")
+        raise

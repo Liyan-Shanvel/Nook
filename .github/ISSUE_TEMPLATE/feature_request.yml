@@ -1,0 +1,16 @@
+name: Feature request
+description: An idea that would help you every day
+labels: [idea]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+      description: Tell us about your day. What is hard or slow right now?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you picture it working. Rough is fine.
