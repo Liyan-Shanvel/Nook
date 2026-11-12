@@ -2,9 +2,14 @@
 
 All notable changes to Nook. Newest first.
 
+## 1.1.4 (2026-11-12)
+
+- First public release.
+- When an update is ready, Nook asks in a small popup: Later or Restart now.
+
 ## 1.1.3 (2026-11-12)
 
-- First public release. Google sign-in now uses Nook's own Google app.
+- Google sign-in now uses Nook's own Google app.
 - Privacy policy added (PRIVACY.md).
 
 ## 1.1.2 (2026-11-12)
