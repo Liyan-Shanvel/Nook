@@ -2,6 +2,10 @@
 
 All notable changes to Nook. Newest first.
 
+## 1.2.1 (2026-11-12)
+
+- **Work with an AI helper.** Claude (through MCP) or your own bot can now read your day and add, move, finish or delete tasks, tick habits, log goals and start a focus session. It only listens on your own PC and needs a secret key that Nook keeps in its data folder. See "Use Nook with Claude" in the README.
+
 ## 1.2.0 (2026-11-12)
 
 - **Vision Board**: a new tab for pictures and words of what you are working for. Add by button, drag or Ctrl+V. Link a card to a goal. Press Show for a slow slideshow. Pictures stay on your PC.

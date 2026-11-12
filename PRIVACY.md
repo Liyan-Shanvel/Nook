@@ -25,6 +25,10 @@ Nook's use of information received from Google APIs follows the [Google API Serv
 
 If you paste your own Fathom API key in a goal, Nook asks Fathom for your recorded calls so a goal can count them. Nook keeps only the call title, its date, its length and how many people spoke. It never keeps the recording or what was said. The key and that list stay on your PC. Disconnect removes the key.
 
+## AI helper access
+
+While Nook is open it answers requests from programs on your own PC (address 127.0.0.1) that send the secret key in `agent_token.txt`. Web pages are refused. Nothing is opened to the internet. What a helper like Claude does with your data is up to that helper and its own privacy rules.
+
 ## Updates
 
 Nook checks GitHub Releases for a newer version. That check sends no personal data.

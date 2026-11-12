@@ -16,6 +16,7 @@ from store import Store  # noqa: E402
 import tracker  # noqa: E402
 import account  # noqa: E402
 import calls  # noqa: E402
+import agent_api  # noqa: E402
 import sounds  # noqa: E402
 import updater  # noqa: E402
 from version import VERSION  # noqa: E402
@@ -395,6 +396,7 @@ def main():
     threading.Thread(target=track_loop, args=(store,), daemon=True).start()
     threading.Thread(target=account.sync_loop, args=(acct,), daemon=True).start()
     threading.Thread(target=calls.sync_loop, args=(store,), daemon=True).start()
+    agent_api.serve(store, DATA, VERSION, log_error)   # local API for Claude / bots (127.0.0.1 + token)
     upd = updater.Updater(DATA, log_error)
     if getattr(sys, "frozen", False):           # only the installed app updates itself, never a dev run
         upd.start()

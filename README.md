@@ -68,6 +68,28 @@ It is free, it has no ads, and your tasks stay on your own computer.
 - Google access is read only, and only for your calendar. Sign out in Settings at any time.
 - The app tracker notes which app is in front while you work. That data never leaves your PC.
 
+## Use Nook with Claude
+
+Nook can be driven by an AI helper. While Nook is open it listens on `127.0.0.1:47811` (your PC only, never the internet). Every call needs the key in `%LOCALAPPDATA%\FocusOS\agent_token.txt`.
+
+**Claude Code:** add the MCP bridge once, then just ask ("add a call with Sam at 3pm", "what is left today?").
+
+```
+claude mcp add nook -s user -- py C:\path\to\Nook\nook_mcp.py
+```
+
+**Any other bot or script on this PC:** plain HTTP.
+
+```
+GET  /v1/health
+GET  /v1/tools                      (lists every tool and its arguments)
+POST /v1/tools/<tool>   {json args}  header: Authorization: Bearer <key>
+```
+
+Tools: `get_today`, `list_tasks`, `list_unfinished`, `add_task`, `update_task`, `delete_task`, `move_unfinished_to_today`, `list_habits`, `add_habit`, `tick_habit`, `list_goals`, `goal_detail`, `add_goal`, `update_goal`, `log_goal`, `calendar`, `focus_minutes`, `timer_status`, `start_focus`, `pause_focus`.
+
+Anyone with the key can change your tasks, so keep it private. To make a new key, close Nook, delete the file and open Nook again.
+
 ## Build from source
 
 Needs Python 3.13 and [Inno Setup 6](https://jrsoftware.org/isinfo.php).
