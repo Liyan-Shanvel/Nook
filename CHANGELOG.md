@@ -2,6 +2,15 @@
 
 All notable changes to Nook. Newest first.
 
+## 1.2.0 (2026-11-12)
+
+- **Vision Board**: a new tab for pictures and words of what you are working for. Add by button, drag or Ctrl+V. Link a card to a goal. Press Show for a slow slideshow. Pictures stay on your PC.
+- **Goals count themselves.** Pick what moves a goal: all focus time, focus on some tasks, ticked tasks, calendar events with a word, sales calls from Fathom (a no-show does not count), a number that moves (like weight), a list of steps, or just add it yourself.
+- Goals: a + button on each goal, weekly or monthly goals that start over, "on track / behind / ahead", a page for each goal with the last 12 weeks, and pause, done and archive.
+- **Calendar**: right-click a task for Start, Done, Rename, Move to tomorrow, Move to a date, Duplicate, Remove time and Delete. Right-click a Google event to hide it in Nook. The month view can add tasks.
+- No more popups: delete is the x, then the small word Delete. The update notice is one thin line at the bottom.
+- The underline when you point at a goal or habit is gone.
+
 ## 1.1.5 (2026-11-12)
 
 - Fixed: "Restart now" did not update. The installer saw Nook still closing and gave up.

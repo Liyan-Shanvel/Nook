@@ -21,6 +21,10 @@ You can sign out in Nook's Settings at any time. You can also remove Nook's acce
 
 Nook's use of information received from Google APIs follows the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.
 
+## Fathom (optional)
+
+If you paste your own Fathom API key in a goal, Nook asks Fathom for your recorded calls so a goal can count them. Nook keeps only the call title, its date, its length and how many people spoke. It never keeps the recording or what was said. The key and that list stay on your PC. Disconnect removes the key.
+
 ## Updates
 
 Nook checks GitHub Releases for a newer version. That check sends no personal data.

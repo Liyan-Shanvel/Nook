@@ -70,8 +70,13 @@ h1{font-weight:700;font-size:28px;letter-spacing:-.02em}
 .modes{display:flex;gap:4px;margin-top:18px}
 .modes button{font-size:12px;color:var(--fg3);padding:4px 10px;border-radius:7px}
 .modes button.on{color:#fff;background:rgba(255,255,255,.08)}
-.updpill{height:28px;padding:0 12px;border-radius:14px;background:#fff;color:#161618;font-size:12px;font-weight:600;margin-right:6px;animation:lensIn .2s ease-out}
-.updpill:hover{background:rgba(255,255,255,.88)}.updpill:disabled{opacity:.6}
+#upd{display:none;position:fixed;left:0;right:0;bottom:0;height:36px;align-items:center;justify-content:space-between;padding:0 40px;border-top:1px solid var(--line);background:var(--bg);font-size:12px;color:var(--fg2);z-index:20}
+body.hasupd #upd{display:flex}body.hasupd #main{height:calc(100% - 112px)}body.hasupd #toast{bottom:52px}
+#upd button{height:24px;padding:0 10px;border-radius:7px;border:1px solid rgba(255,255,255,.22);font-size:12px;font-weight:500;color:#fff}
+#upd button:hover{background:rgba(255,255,255,.08)}#upd button:disabled{opacity:.6}
+.armed{color:var(--red)!important;white-space:nowrap}
+.row .x.armed{opacity:1;width:auto;padding:0 9px;font-size:12px;font-weight:600;background:rgba(255,107,94,.12);overflow:hidden;animation:armIn .18s ease-out}
+@keyframes armIn{from{max-width:22px;opacity:.3}to{max-width:90px;opacity:1}}
 /* idle timer: scroll the ring or click the time to change the length */
 .clock.settable{cursor:text;border-radius:14px;padding:2px 10px;transition:background .15s}
 .ring:hover .clock.settable{background:rgba(255,255,255,.04)}

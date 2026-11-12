@@ -44,9 +44,14 @@ const api = new Proxy({}, {
 });
 
 let toastTimer;
-function toast(msg) {
-  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+function toast(msg, undo) {                    // one quiet line at the bottom; an Undo word when there is something to undo
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show'); t.classList.toggle('act', !!undo);
+  if (undo) {
+    const b = document.createElement('button'); b.textContent = 'Undo';
+    b.addEventListener('click', e => { e.stopPropagation(); t.classList.remove('show', 'act'); undo(); });
+    t.appendChild(b);
+  }
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show', 'act'), undo ? 6000 : 3000);
 }
 async function call(name, ...args) {
   try { return await api[name](...args); }
@@ -69,7 +74,6 @@ async function load() {
   S.timer = S.d.timer;
   if (S.d.settings) S.settings = S.d.settings;
   S.upd = await call('update_status').catch(() => S.upd);
-  if (S.upd && S.upd.ready && !S.modal && S.updAsked !== S.upd.latest) { S.updAsked = S.upd.latest; openModal({ kind: 'update' }); }   // ask once per version
   if (S.d.today) {
     if (S.today && S.d.today !== S.today && S.date === S.today) S.date = S.d.today;   // midnight passed
     S.today = S.d.today;
@@ -77,26 +81,45 @@ async function load() {
   render();
 }
 
+function renderUpd() {                          // a thin strip at the bottom, never a popup
+  const on = !!(S.upd && S.upd.ready), box = $('#upd');
+  document.body.classList.toggle('hasupd', on);
+  if (!on) { box.innerHTML = ''; return; }
+  if (box.dataset.v === S.upd.latest && box.innerHTML) return;      // keep "Restarting..." while it installs
+  box.dataset.v = S.upd.latest;
+  box.innerHTML = `<span>&uarr;&nbsp; Version ${esc(S.upd.latest || '')} is ready</span><button data-act="update">Restart to update</button>`;
+}
+/* risky buttons: the first click turns the button into its own red word, the second click does it */
+function twice(el, fn, word = 'Delete') {
+  if (el.classList.contains('armed')) { const off = S.armed; S.armed = null; clearTimeout(S.armT); if (off) off(); return fn(); }
+  if (S.armed) S.armed();
+  const html = el.innerHTML;
+  el.textContent = word; el.classList.add('armed');
+  S.armed = () => { clearTimeout(S.armT); S.armed = null; if (el.isConnected) { el.innerHTML = html; el.classList.remove('armed'); } };
+  S.armT = setTimeout(() => S.armed && S.armed(), 3000);
+}
+
 function render() {
-  renderTop();
+  renderTop(); renderUpd();
   const m = $('#main');
   const keep = $('.tlwrap') ? $('.tlwrap').scrollTop : null;
   if (S.tab === 'today') m.innerHTML = todayHTML();
   else if (S.tab === 'calendar') m.innerHTML = S.view === 'day' ? calDayHTML() : S.view === 'week' ? weekHTML() : monthHTML();
   else {
-    const pg = $('.page'), keepY = pg && S.lastTab === S.tab + S.habit ? pg.scrollTop : 0;
+    const pg = $('.page'), keepY = pg && S.lastTab === S.tab + S.habit + S.goal ? pg.scrollTop : 0;
     m.innerHTML = moreHTML();
     if ($('.page')) $('.page').scrollTop = keepY;
   }
-  S.lastTab = S.tab + S.habit;
+  S.lastTab = S.tab + S.habit + S.goal;
   if (S.tab === 'calendar' && S.view === 'day') wireDay(keep);
   if (S.tab === 'calendar' && S.view === 'week') wireWeek();
   if (S.refocus) { const el = $(S.refocus); if (el) el.focus(); S.refocus = null; }
   tick();
+  if (typeof wireMore === 'function') wireMore();
 }
 
 function renderTop() {
-  const tabs = ['Today', 'Calendar', 'Habits', 'Goals', 'Progress'];
+  const tabs = ['Today', 'Calendar', 'Habits', 'Goals', 'Vision', 'Progress'];
   let date = shortDay(S.today), right = '';
   if (S.tab === 'calendar') {
     if (S.view === 'week') {
@@ -112,7 +135,6 @@ function renderTop() {
   } else if (S.tab === 'today' && S.d && S.d.focused !== undefined) {
     right = `<span class="goal"><b>${dur(S.d.focused)}</b> of ${dur(S.settings.goal_min)}</span>`;
   } else if (MORE_TABS.includes(S.tab)) ({ date, right } = moreTop());
-  if (S.upd && S.upd.ready) right = `<button class="updpill" data-act="update" title="Nook ${esc(S.upd.latest || '')} is ready">Update ready · Restart</button>` + right;
   right += `<button class="gear" data-act="settings" title="Settings">${ICON.gear}</button>`;
   $('#top').innerHTML = `<div><img class="logo" src="logo.png" width="22" height="22" alt=""><span class="brand">Nook</span><span class="date">${date}</span></div>
     <div class="tabs">${tabs.map(t => `<button class="tab ${S.tab === t.toLowerCase() ? 'on' : ''}" data-act="tab" data-v="${t.toLowerCase()}">${t}</button>`).join('')}</div>
@@ -209,7 +231,7 @@ function todayHTML() {
     S.refocus = S.refocus || `#add-${S.today}`;
   } else {
     list = `${carry}<span class="cap">Today</span><div style="margin-top:6px">${tasks.map(x => taskRow(x, { rowAct: 'start' })).join('')}</div>
-      ${addRow(S.today)}<div class="hint">Click a task to start it. Double-click to rename. Right-click to link it to a goal. Give it a time in Calendar.</div>`;
+      ${addRow(S.today)}<div class="hint">Click a task to start it. Double-click to rename. Right-click for more. Give it a time in Calendar.</div>`;
   }
   return `<div class="todaytab"><section class="focus">
       <div class="ring">${ringSVG()}<div class="center">${center}</div></div>
@@ -228,7 +250,7 @@ function blockHTML(x) {
       <button data-act="untime" data-id="${x.id}">Remove time</button></span>`
     : x.done ? '<span class="tick">&#10003;</span>' : now ? '<span class="nowtag">NOW</span>' : '';
   return `<div class="blk task ${x.done ? 'done' : ''} ${now ? 'now' : ''} ${tall ? 'tall' : ''} ${sel ? 'sel' : ''}" data-id="${x.id}" style="top:${y(x.start_min) + 1}px;height:${h}px">
-    ${tall ? `<span class="t">${esc(x.title)}<small>${time}</small></span>` : `<span class="t">${esc(x.title)}</span><small>${time}</small>`}
+    ${tall ? `<span class="t"><span data-edit="${x.id}">${esc(x.title)}</span><small>${time}</small></span>` : `<span class="t" data-edit="${x.id}">${esc(x.title)}</span><small>${time}</small>`}
     ${acts}<i class="grip"></i></div>`;
 }
 
@@ -264,7 +286,7 @@ function calDayHTML() {
     return hh >= 30 ? `<div class="ent ${cls}" style="top:${y(e.start_min) + 1}px;height:${hh}px" title="${esc(e.label)}">${esc(e.label)}<small>${dur(e.mins)}</small></div>`
       : `<div class="ent one ${cls}" style="top:${y(e.start_min) + 1}px;height:${Math.max(hh, 12)}px" title="${esc(e.label)}">${esc(e.label)}, ${dur(e.mins)}</div>`;
   }).join('');
-  const meetBlocks = meets.map(m => `<div class="blk meet" style="top:${y(m.start_min) + 1}px;height:${Math.max(18, y(m.end_min) - y(m.start_min) - 2)}px">
+  const meetBlocks = meets.map(m => `<div class="blk meet" data-meet="${esc(m.id)}" style="top:${y(m.start_min) + 1}px;height:${Math.max(18, y(m.end_min) - y(m.start_min) - 2)}px">
       <span class="t">${esc(m.title)}</span><small>${hm(m.start_min)} – ${hm(m.end_min)}, Google Calendar</small></div>`).join('');
   const nowLine = isToday ? `<div class="nowline" id="nowline" style="top:${y(nowMin())}px"><b><i id="nowlbl">${hm(nowMin())}</i></b><u></u></div>` : '';
   return `<div class="cal">
@@ -273,7 +295,7 @@ function calDayHTML() {
       <span class="cap lbl">${isToday ? "Today's tasks" : 'Tasks'}</span>
       ${tasks.map(x => taskRow(x, { drag: true, chip: true })).join('')}
       ${addRow(S.date, 'Add a task')}
-      <div class="hint">Drag a task onto the day to give it a time. Drag on an empty spot to make a block. Press play to start now.</div></section>
+      <div class="hint">Drag a task onto the day to give it a time. Drag a block up or down to change its time. Right-click for more.</div></section>
     <section class="day"><div class="heads"><span class="cap">Plan</span><span class="cap">What happened</span></div>
       <div class="tlwrap"><div class="tl" style="height:${(END - START) * H}px">
         <div class="hours" style="position:relative">${hours.join('')}</div>
@@ -310,7 +332,7 @@ function wireDay(keepScroll) {
 }
 
 function onPlanDown(e) {
-  if (e.button !== 0 || e.target.closest('button')) return;
+  if (e.button !== 0 || e.target.closest('button, .editing')) return;
   if (S.pop) { closePop(); return; }
   const plan = e.currentTarget, top = plan.getBoundingClientRect().top;
   const toMin = cy => (cy - top) / H * 60 + START * 60;
@@ -411,9 +433,9 @@ function itemsFor(day) {
   return [...ms, ...ts].sort((a, b) => (a.start_min ?? 9999) - (b.start_min ?? 9999));
 }
 function itemHTML(x) {
-  if (x.meet) return `<div class="it meet"><span>${esc(x.title)}</span><small>${hm(x.start_min)}, Google Calendar</small></div>`;
+  if (x.meet) return `<div class="it meet" data-meet="${esc(x.id)}"><span>${esc(x.title)}</span><small>${hm(x.start_min)}, Google Calendar</small></div>`;
   const now = running(x.id);
-  return `<div class="it ${x.done ? 'done' : ''} ${now ? 'now' : ''}" draggable="true" data-id="${x.id}" data-act="openday" data-day="${x.day}">${esc(x.title)}
+  return `<div class="it ${x.done ? 'done' : ''} ${now ? 'now' : ''}" draggable="true" data-id="${x.id}" data-act="openday" data-day="${x.day}"><span data-edit="${x.id}">${esc(x.title)}</span>
     <small>${x.start_min != null ? hm(x.start_min) : 'No time'}${now ? ', now' : ''}</small></div>`;
 }
 function weekHTML() {
@@ -440,7 +462,7 @@ function weekHTML() {
   return `<div class="wkhead"><h1>${hasToday ? 'This week' : `Week of ${ad.getDate()} ${MON[ad.getMonth()].slice(0, 3)}`}</h1>
       <div class="sub" style="margin-top:4px">${plural(nT, 'thing')} planned${nM ? `, ${plural(nM, 'call')}` : ''}. ${dur(focus)} of focus${hasToday ? ' so far' : ''}.</div></div>
     <div class="wk">${cols}</div>
-    <div class="hint" style="margin-top:12px">Drag a thing to another day to move it. Click a date to open that day.</div>`;
+    <div class="hint" style="margin-top:12px">Drag a thing to another day to move it. Right-click it for more. Click a date to open that day.</div>`;
 }
 function wireWeek() {
   if (S.adding) S.refocus = '#wkadd';
@@ -479,8 +501,8 @@ function monthHTML() {
   if (sel) {
     const its = itemsFor(sel), sd = parse(sel);
     side = `<div class="side" style="padding-top:12px"><span class="cap">${DOW[sd.getDay()]} ${sd.getDate()}</span>
-      <div style="margin-top:8px">${its.length ? its.map(x => x.meet ? itemHTML(x) : `<div class="it ${x.done ? 'done' : ''}">${esc(x.title)}<small>${x.start_min != null ? hm(x.start_min) : 'No time'}</small></div>`).join('')
-        : '<div class="empty">Nothing planned</div>'}</div>
+      <div style="margin-top:8px">${its.length ? its.map(itemHTML).join('') : '<div class="empty">Nothing planned</div>'}</div>
+      <div class="foot" style="margin-top:10px"><input id="moadd" data-addday="${sel}" placeholder="+ Add a task, Enter"></div>
       <div class="btns" style="margin-top:18px"><button class="btn main" data-act="openday" data-day="${sel}">Open this day</button></div></div>`;
   }
   return `<div class="cal"><section class="mo"><h1>${MON[mon]}</h1>
@@ -514,7 +536,7 @@ async function step(n) {
   S.sel = null; S.msel = null; load();
 }
 const ACT = {
-  tab: el => { S.tab = el.dataset.v; S.sel = null; S.adding = null; S.habit = null; if (!S.date) S.date = S.today; load(); },
+  tab: el => { S.tab = el.dataset.v; S.sel = null; S.adding = null; S.habit = null; S.goal = null; if (!S.date) S.date = S.today; load(); },
   view: el => { const v = el.dataset.v; if (S.view === v) S.date = S.today; S.view = v; S.sel = null; S.msel = null; S.adding = null; load(); },
   step: el => step(Number(el.dataset.v)),
   start: async el => {
@@ -524,10 +546,9 @@ const ACT = {
   },
   toggle: async el => { const x = findTask(el.dataset.id); if (!x) return; await call('update_task', x.id, { done: !x.done }); load(); },
   untime: async el => { S.sel = null; await call('update_task', Number(el.dataset.id), { start_min: null, end_min: null }); load(); },
-  del: async el => {
+  del: el => {
     const x = findTask(el.dataset.id);
-    if (!x || !(await ask(`Delete "${x.title}"?`))) return;
-    await call('delete_task', x.id); load();
+    if (x) return twice(el, async () => { closeMenu(); await call('delete_task', x.id); load(); }, el.closest('#menu') ? 'Click again to delete' : 'Delete');
   },
   go: async () => { await call(S.timer.running ? 'timer_pause' : 'timer_start'); load(); },
   reset: async () => { await call('timer_reset'); load(); },
@@ -543,7 +564,7 @@ const ACT = {
     inp.addEventListener('blur', () => commitClock(inp, true), { once: true });
   },
   update: async el => {
-    el.textContent = 'Updating…'; el.disabled = true;
+    el.textContent = 'Restarting…'; el.disabled = true;
     if (!(await call('update_now').catch(() => false))) { el.textContent = 'Update failed · try later'; }
   },
   tlen: el => { S.tlen = Number(el.dataset.id); S.refocus = '#tlenin'; render(); },
@@ -618,21 +639,23 @@ document.addEventListener('input', e => {
 
 document.addEventListener('click', e => {
   if (S.pop && !e.target.closest('#pop') && !e.target.closest('#plan')) closePop();
+  if (S.armed && !e.target.closest('.armed')) S.armed();
   const el = e.target.closest('[data-act]');
   if (el && ACT[el.dataset.act]) {
     e.stopPropagation();
-    if (el.classList.contains('row')) {          // wait a moment: a double-click means rename, not start
-      clearTimeout(S.clickT); S.clickT = setTimeout(() => ACT.start(el), 250); return;
+    if (el.classList.contains('row') || el.classList.contains('it')) {   // wait a moment: a double-click means rename
+      const act = ACT[el.dataset.act];
+      clearTimeout(S.clickT); S.clickT = setTimeout(() => Promise.resolve(act(el)).catch(() => {}), 250); return;
     }
     Promise.resolve(ACT[el.dataset.act](el)).catch(() => {});
     return;
   }
   if (S.sel && !e.target.closest('#plan')) { S.sel = null; render(); }   // plan clicks are handled by its pointer code
 });
-document.addEventListener('dblclick', e => {           // rename in place
-  const t = e.target.closest('[data-edit]'); if (!t) return;
+document.addEventListener('dblclick', e => { const t = e.target.closest('[data-edit]'); if (t) renameEl(t); });
+function renameEl(t) {                                  // rename in place
   clearTimeout(S.clickT);
-  const x = findTask(t.dataset.edit); if (!x) return;
+  const x = findTask(t.dataset.edit); if (!x || t.isContentEditable) return;
   t.contentEditable = 'true'; t.classList.add('editing'); t.focus();
   document.getSelection().selectAllChildren(t);
   let done = false;
@@ -645,7 +668,7 @@ document.addEventListener('dblclick', e => {           // rename in place
   };
   t.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); save(true); } if (ev.key === 'Escape') save(false); });
   t.addEventListener('blur', () => save(true), { once: true });
-});
+}
 document.addEventListener('keydown', async e => {
   if (e.target.id === 'focusname') {
     const list = S.sugg || [];
@@ -680,12 +703,12 @@ document.addEventListener('keydown', async e => {
     const day = inp.dataset.addday, v = inp.value.trim();
     inp.value = '';
     await call('add_task', v, day).catch(() => {});
-    S.refocus = inp.id === 'wkadd' ? '#wkadd' : `#add-${day}`;
+    S.refocus = inp.id === 'wkadd' || inp.id === 'moadd' ? '#' + inp.id : `#add-${day}`;
     load(); return;
   }
   if (inp && e.key === 'Escape') { inp.value = ''; inp.blur(); if (S.adding) { S.adding = null; render(); } return; }
   if (e.target.matches && e.target.matches('input, [contenteditable=true]')) return;
-  if (e.key === 'Escape') { if (S.pop) closePop(); else if (S.sel) { S.sel = null; render(); } }
+  if (e.key === 'Escape') { if (S.armed) S.armed(); else if (S.pop) closePop(); else if (S.sel) { S.sel = null; render(); } }
   if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel && S.tab === 'calendar') {
     const id = S.sel; S.sel = null;
     await call('update_task', id, { start_min: null, end_min: null }).catch(() => {}); load();
@@ -709,7 +732,7 @@ async function boot() {
   setInterval(tick, 250);
   setInterval(() => {
     const typing = document.activeElement && document.activeElement.matches('input, [contenteditable=true]');
-    if (!typing && !S.pop && !S.busy && !S.modal && !S.menu) load().catch(() => {});
+    if (!typing && !S.pop && !S.busy && !S.modal && !S.menu && !S.armed) load().catch(() => {});
   }, 15000);
 }
 if (window.pywebview && window.pywebview.api) boot();

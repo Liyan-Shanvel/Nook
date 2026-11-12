@@ -71,6 +71,19 @@ if "--seed" in sys.argv:
     g2 = store.add_goal("Spanish to B2", 100, "hours", "2027-03-31", "focus")
     g3 = store.add_goal("Save $10,000", 10000, "$", None, "typed")
     store.update_goal(g3["id"], {"typed": 1000})
+    td0 = dt.date.fromisoformat(today)
+    store.add_goal({"title": "30 sales calls", "target": 30, "unit": "calls", "source": "calls",
+                    "deadline": "2026-12-31", "start": "2026-01-01"})
+    store.save_calls([{"id": f"f:{i}", "title": "Intro call", "day": (td0 - dt.timedelta(days=4 * i)).isoformat(),
+                       "mins": 30, "speakers": 1 if i % 4 == 0 else 2, "external": True} for i in range(1, 12)])
+    gw = store.add_goal({"title": "Gain 3 kg", "target": 61, "base": 58, "unit": "kg", "source": "value",
+                         "deadline": "2026-12-31", "start": (td0 - dt.timedelta(days=20)).isoformat()})
+    store.log_goal(gw["id"], 58.4, (td0 - dt.timedelta(days=12)).isoformat())
+    store.log_goal(gw["id"], 59.1, (td0 - dt.timedelta(days=3)).isoformat(), "morning")
+    gs = store.add_goal({"title": "Move to the new flat", "source": "steps", "target": 1})
+    for i, t in enumerate(["Sign the lease", "Book the movers", "Pack the kitchen"]):
+        store.add_goal_step(gs["id"], t)
+    store.add_goal({"title": "Read every week", "target": 3, "unit": "chapters", "source": "hand", "period": "week"})
     store.update_task(a["id"], {"goal_id": g2["id"]})
     store._q("UPDATE habit SET created=? WHERE 0", ("x",))
     td = dt.date.fromisoformat(today)
@@ -114,7 +127,12 @@ class H(http.server.SimpleHTTPRequestHandler):
         try:
             if name.startswith("_"):
                 raise ValueError("hidden")
-            if name == "autostart":           # never touch the real Startup folder from a test
+            if name in ("calls_connect", "calls_sync"):     # never call the real Fathom from a test
+                if name == "calls_connect":
+                    store._set("fathom_key", "test" if args and args[0] else "")
+                    store._set("fathom", {"ok": True, "at": store.clock(), "count": 11, "real": 9} if args and args[0] else {})
+                out = {"ok": api.calls_status()}
+            elif name == "autostart":           # never touch the real Startup folder from a test
                 FAKE["autostart"] = bool(args[0]) if args else FAKE["autostart"]
                 out = {"ok": FAKE["autostart"]}
             else:

@@ -12,7 +12,7 @@ a = Analysis(
         (os.path.join(ROOT, "build", "focusos.ico"), "."),
         (os.path.join(ROOT, "google_client.json"), "."),
     ],
-    hiddenimports=["bar", "account", "tracker", "store", "sounds", "updater", "version", "pystray._win32", "PIL._tkinter_finder",
+    hiddenimports=["bar", "account", "calls", "tracker", "store", "sounds", "updater", "version", "pystray._win32", "PIL._tkinter_finder",
                    "webview.platforms.edgechromium", "webview.platforms.winforms", "clr"],
     excludes=["pytest", "matplotlib", "numpy", "pandas", "IPython", "scipy"],
 )

@@ -15,6 +15,7 @@ sys.path.insert(0, HERE)
 from store import Store  # noqa: E402
 import tracker  # noqa: E402
 import account  # noqa: E402
+import calls  # noqa: E402
 import sounds  # noqa: E402
 import updater  # noqa: E402
 from version import VERSION  # noqa: E402
@@ -92,7 +93,8 @@ class Api:
                 "timer": t, "current": current, "settings": s.settings(), "goals": self._goal_names()}
 
     def _goal_names(self):
-        return [{"id": r["id"], "title": r["title"]} for r in self._s._all("SELECT id,title FROM goal ORDER BY created, id")]
+        return [{"id": r["id"], "title": r["title"]} for r in self._s._all(
+            "SELECT id,title FROM goal WHERE status IN ('active','paused') ORDER BY pos, created, id")]
 
     def day_data(self, day):
         s = self._s
@@ -181,10 +183,88 @@ class Api:
     # goals
     def goals_data(self):
         s = self._s
-        return {"today": s.today(), "goals": s.goals(), "focused": s.focused(s.today()), "settings": s.settings()}
+        return {"today": s.today(), "goals": s.goals(), "focused": s.focused(s.today()), "settings": s.settings(),
+                "calls": self._calls_status()}
 
-    def add_goal(self, title, target, unit="", deadline=None, mode="tasks"):
-        return self._s.add_goal(title, target, unit, deadline, mode)
+    def goal_detail(self, gid):
+        s = self._s
+        return {"today": s.today(), "goal": s.goal(int(gid), detail=True), "goals": self._goal_names(),
+                "focused": s.focused(s.today()), "settings": s.settings(), "calls": self._calls_status()}
+
+    def add_goal(self, fields):
+        return self._s.add_goal(fields)
+
+    def log_goal(self, gid, amount, day=None, note=""):
+        return self._s.log_goal(int(gid), amount, day, note)
+
+    def delete_goal_log(self, lid):
+        return self._s.delete_goal_log(int(lid))
+
+    def add_goal_step(self, gid, title):
+        return self._s.add_goal_step(int(gid), title)
+
+    def update_goal_step(self, sid, fields):
+        return self._s.update_goal_step(int(sid), fields)
+
+    def delete_goal_step(self, sid):
+        return self._s.delete_goal_step(int(sid))
+
+    # recorded calls (Fathom). The key stays on this PC.
+    def _calls_status(self):
+        st = dict(self._s._get("fathom", None) or {})
+        st["connected"] = bool(self._s._get("fathom_key", ""))
+        return st
+
+    def calls_status(self):
+        return self._calls_status()
+
+    def calls_connect(self, key):
+        key = (key or "").strip()
+        if key:
+            calls.sync(self._s, key)                 # raises with the reason when the key is wrong
+        self._s._set("fathom_key", key)
+        if not key:
+            self._s._set("fathom", {})
+        return self._calls_status()
+
+    def calls_sync(self):
+        calls.sync_quiet(self._s)
+        return self._calls_status()
+
+    # calendar extras
+    def duplicate_task(self, tid):
+        return self._s.duplicate_task(int(tid))
+
+    def hide_event(self, mid, on=True):
+        return self._s.hide_event(str(mid), bool(on))
+
+    def show_all_events(self):
+        return self._s.show_all_events()
+
+    def hidden_events(self):
+        return len(self._s._get("hidden_events", []))
+
+    # vision board
+    def vision_data(self):
+        s = self._s
+        return {"today": s.today(), "cards": s.vision(), "goals": s.goals(), "focused": s.focused(s.today()),
+                "settings": s.settings()}
+
+    def add_vision_image(self, b64):
+        return self._s.add_vision_image(b64)
+
+    def add_vision_text(self, text):
+        return self._s.add_vision_text(text)
+
+    def vision_image(self, vid):
+        return self._s.vision_image(int(vid))
+
+    def update_vision(self, vid, fields):
+        return self._s.update_vision(int(vid), fields)
+
+    def delete_vision(self, vid):
+        self._s.delete_vision(int(vid))
+        return True
 
     def update_goal(self, gid, fields):
         return self._s.update_goal(int(gid), fields)
@@ -314,6 +394,7 @@ def main():
     acct = account.Account(store, DATA)
     threading.Thread(target=track_loop, args=(store,), daemon=True).start()
     threading.Thread(target=account.sync_loop, args=(acct,), daemon=True).start()
+    threading.Thread(target=calls.sync_loop, args=(store,), daemon=True).start()
     upd = updater.Updater(DATA, log_error)
     if getattr(sys, "frozen", False):           # only the installed app updates itself, never a dev run
         upd.start()

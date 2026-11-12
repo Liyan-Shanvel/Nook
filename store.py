@@ -4,8 +4,12 @@ A task, a calendar block and a focus session are the SAME item seen three ways:
 a task with start_min/end_min is a calendar block; a focus session points at a task.
 Times of day are minutes from midnight (0-1440). Timestamps are unix seconds.
 """
+import base64
 import datetime as dt
 import json
+import os
+import re
+import secrets
 import sqlite3
 import threading
 import time
@@ -37,8 +41,31 @@ CREATE TABLE IF NOT EXISTS habit_tick(habit_id INTEGER NOT NULL, day TEXT NOT NU
 CREATE TABLE IF NOT EXISTS goal(
   id INTEGER PRIMARY KEY, title TEXT NOT NULL, target REAL NOT NULL, unit TEXT NOT NULL DEFAULT '',
   deadline TEXT, mode TEXT NOT NULL DEFAULT 'tasks', typed REAL NOT NULL DEFAULT 0, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS goal_log(
+  id INTEGER PRIMARY KEY, goal_id INTEGER NOT NULL, day TEXT NOT NULL, amount REAL NOT NULL,
+  note TEXT NOT NULL DEFAULT '', created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS goal_step(
+  id INTEGER PRIMARY KEY, goal_id INTEGER NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
+  done_day TEXT, pos REAL NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS call(
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, day TEXT NOT NULL, mins REAL NOT NULL DEFAULT 0,
+  speakers INTEGER NOT NULL DEFAULT 0, external INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'fathom');
+CREATE TABLE IF NOT EXISTS vision(
+  id INTEGER PRIMARY KEY, kind TEXT NOT NULL, file TEXT, text TEXT NOT NULL DEFAULT '',
+  caption TEXT NOT NULL DEFAULT '', goal_id INTEGER, wide INTEGER NOT NULL DEFAULT 0,
+  pos REAL NOT NULL DEFAULT 0, created REAL NOT NULL);
 """
-GOAL_MODES = ("tasks", "focus", "typed")
+# What moves a goal. hand = you add it, linked = ticked tasks and habits you point at it,
+# tasks_word = ticked tasks with a word, focus_all = all focus time, focus_word = focus on linked
+# tasks or ones with a word, calendar = past calendar events with a word, calls = recorded calls
+# where the other person showed up, value = a number that moves (weight), steps = a checklist.
+GOAL_SOURCES = ("hand", "linked", "tasks_word", "focus_all", "focus_word", "calendar", "calls", "value", "steps")
+GOAL_STATUS = ("active", "paused", "done", "archived")
+GOAL_COLS = [("source", "TEXT NOT NULL DEFAULT ''"), ("match", "TEXT NOT NULL DEFAULT ''"), ("start", "TEXT"),
+             ("period", "TEXT NOT NULL DEFAULT ''"), ("status", "TEXT NOT NULL DEFAULT 'active'"),
+             ("why", "TEXT NOT NULL DEFAULT ''"), ("step", "REAL NOT NULL DEFAULT 1"),
+             ("base", "REAL NOT NULL DEFAULT 0"), ("pos", "REAL NOT NULL DEFAULT 0")]
+VISION_MAX = 3 * 1024 * 1024
 
 # Rules match the APP name only (for a browser that is the site, e.g. "YouTube"), never the
 # window title: a code file called youtube_notes.md must not count as distracted.
@@ -74,6 +101,7 @@ class Store:
         self.clock = clock
         self.on_sound = None        # app sets this to sounds.play; tests leave it None
         self.lock = threading.RLock()
+        self.dir = os.path.dirname(os.path.abspath(path))
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA busy_timeout=5000")
@@ -87,6 +115,16 @@ class Store:
             self.db.commit()
         if "label" not in {r[1] for r in self.db.execute("PRAGMA table_info(session)")}:
             self.db.execute("ALTER TABLE session ADD COLUMN label TEXT")   # name of a no-task focus
+            self.db.commit()
+        if "source" not in {r[1] for r in self.db.execute("PRAGMA table_info(goal)")}:
+            # 1.2: goals got "what moves it". Old goals keep their numbers: a typed total becomes one entry.
+            for name, kind in GOAL_COLS:
+                self.db.execute(f"ALTER TABLE goal ADD COLUMN {name} {kind}")
+            self.db.execute("UPDATE goal SET source=CASE mode WHEN 'tasks' THEN 'linked' "
+                            "WHEN 'focus' THEN 'focus_word' ELSE 'hand' END, pos=id")
+            self.db.execute("INSERT INTO goal_log(goal_id,day,amount,note,created) "
+                            "SELECT id, created, typed, '', ? FROM goal WHERE mode='typed' AND typed<>0",
+                            (self.clock(),))
             self.db.commit()
 
     # ---------- plumbing ----------
@@ -233,6 +271,11 @@ class Store:
                 t["task_id"] = None
                 self._set("timer", t)
 
+    def duplicate_task(self, tid):
+        t = self.task(tid)
+        new = self.add_task(t["title"], t["day"])
+        return self.update_task(new["id"], {"goal_id": t["goal_id"], "focus_min": t["focus_min"]})
+
     def tasks(self, a, b=None):
         rows = self._all("SELECT * FROM task WHERE day BETWEEN ? AND ? "
                          "ORDER BY day, start_min IS NULL, start_min, pos", (a, b or a))
@@ -254,8 +297,19 @@ class Store:
 
     # ---------- meetings (filled by the Google Calendar sync) ----------
     def meetings(self, a, b=None):
-        return self._all("SELECT * FROM meeting WHERE day BETWEEN ? AND ? ORDER BY day, start_min",
-                         (a, b or a))
+        hidden = set(self._get("hidden_events", []))
+        return [m for m in self._all("SELECT * FROM meeting WHERE day BETWEEN ? AND ? ORDER BY day, start_min",
+                                     (a, b or a)) if m["id"] not in hidden]
+
+    def hide_event(self, mid, on=True):
+        """Google events are read-only for Nook, so 'remove' means: stop showing it here."""
+        ids = [x for x in self._get("hidden_events", []) if x != mid]
+        self._set("hidden_events", ids + [mid] if on else ids)
+        return len(self._get("hidden_events", []))
+
+    def show_all_events(self):
+        self._set("hidden_events", [])
+        return 0
 
     def replace_meetings(self, a, b, items):
         with self.lock:
@@ -655,6 +709,22 @@ class Store:
         return {"pct": round(100 * kept / planned) if planned else None, "habits": per}
 
     # ---------- goals ----------
+    # A goal has ONE thing that moves it (source). Whatever the source, a number added by hand
+    # (goal_log) counts too, so nothing is ever stuck.
+    GOAL_FIELDS = ("title", "target", "unit", "deadline", "source", "match", "start", "period",
+                   "status", "why", "step", "base", "pos")
+
+    @staticmethod
+    def _words(match):
+        return [w.strip() for w in (match or "").split(",") if w.strip()]
+
+    @staticmethod
+    def _hit(words, text):
+        """Whole word, any case: 'call' matches 'Sales call', never 'recall'."""
+        text = text or ""
+        return any(re.search("(?<![0-9A-Za-z])" + re.escape(w) + "(?![0-9A-Za-z])", text, re.I)
+                   for w in words)
+
     def _goal_row(self, gid):
         r = self._all("SELECT * FROM goal WHERE id=?", (gid,))
         if not r:
@@ -666,72 +736,360 @@ class Store:
         g["title"] = (g["title"] or "").strip()
         if not g["title"]:
             raise ValueError("empty title")
-        g["target"] = float(g["target"])
-        if g["target"] <= 0:
+        g["source"] = g.get("source") or "hand"
+        if g["source"] not in GOAL_SOURCES:
+            raise ValueError("bad source")
+        g["target"] = float(g.get("target") or 0)
+        g["base"] = float(g.get("base") or 0)
+        if g["source"] == "steps":
+            g["target"] = max(g["target"], 1.0)
+        elif g["source"] == "value":
+            if g["target"] == g["base"]:
+                raise ValueError("the target must differ from where you start")
+        elif g["target"] <= 0:
             raise ValueError("target must be above 0")
-        if g["mode"] not in GOAL_MODES:
-            raise ValueError("bad mode")
-        if g.get("deadline"):
-            dt.date.fromisoformat(g["deadline"])
-        else:
-            g["deadline"] = None
-        g["unit"] = (g.get("unit") or "").strip()
-        g["typed"] = float(g.get("typed") or 0)
+        for k in ("deadline", "start"):
+            if g.get(k):
+                dt.date.fromisoformat(g[k])
+            else:
+                g[k] = None
+        g["period"] = g.get("period") or ""
+        if g["period"] not in ("", "week", "month"):
+            raise ValueError("bad period")
+        g["status"] = g.get("status") or "active"
+        if g["status"] not in GOAL_STATUS:
+            raise ValueError("bad status")
+        g["match"] = ", ".join(Store._words(g.get("match")))
+        if g["source"] in ("calendar", "tasks_word") and not g["match"]:
+            raise ValueError("type the word to look for")
+        g["unit"] = "hours" if g["source"] in ("focus_all", "focus_word") else (g.get("unit") or "").strip()
+        g["why"] = (g.get("why") or "").strip()
+        g["step"] = float(g.get("step") or 1)
+        if g["step"] <= 0:
+            raise ValueError("the +1 amount must be above 0")
+        g["pos"] = float(g.get("pos") or 0)
+        g["mode"] = {"linked": "tasks", "focus_all": "focus", "focus_word": "focus"}.get(g["source"], "typed")
         return g
 
-    def add_goal(self, title, target, unit="", deadline=None, mode="tasks"):
-        g = self._goal_fields({"title": title, "target": target, "unit": unit, "deadline": deadline,
-                               "mode": mode, "typed": 0})
-        cur = self._q("INSERT INTO goal(title,target,unit,deadline,mode,typed,created) VALUES(?,?,?,?,?,?,?)",
-                      (g["title"], g["target"], g["unit"], g["deadline"], g["mode"], 0, self.today()))
-        return self.goal(cur.lastrowid)
+    def add_goal(self, title, target=None, unit="", deadline=None, mode=None):
+        """add_goal({fields}) from the app. The old (title, target, unit, deadline, mode) form still works."""
+        f = dict(title) if isinstance(title, dict) else {
+            "title": title, "target": target, "unit": unit, "deadline": deadline,
+            "source": {"tasks": "linked", "focus": "focus_word", "typed": "hand"}.get(mode or "tasks", mode)}
+        bad = set(f) - set(self.GOAL_FIELDS)
+        if bad:
+            raise ValueError(f"cannot set {sorted(bad)}")
+        g = self._goal_fields(f)
+        with self.lock:
+            if not f.get("pos"):
+                g["pos"] = self._all("SELECT COALESCE(MAX(pos),0)+1 p FROM goal")[0]["p"]
+            cur = self._q(
+                "INSERT INTO goal(title,target,unit,deadline,mode,typed,created,source,match,start,period,"
+                "status,why,step,base,pos) VALUES(?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?)",
+                (g["title"], g["target"], g["unit"], g["deadline"], g["mode"], self.today(), g["source"],
+                 g["match"], g["start"], g["period"], g["status"], g["why"], g["step"], g["base"], g["pos"]))
+            return self.goal(cur.lastrowid)
 
     def update_goal(self, gid, fields):
-        bad = set(fields) - {"title", "target", "unit", "deadline", "mode", "typed"}
+        fields = dict(fields)
+        typed = fields.pop("typed", None)           # old name for "set the number to"
+        if "mode" in fields:
+            m = fields.pop("mode")
+            fields["source"] = {"tasks": "linked", "focus": "focus_word", "typed": "hand"}.get(m, m)
+        bad = set(fields) - set(self.GOAL_FIELDS)
         if bad:
             raise ValueError(f"cannot change {sorted(bad)}")
         with self.lock:
             g = self._goal_fields({**self._goal_row(gid), **fields})
-            self._q("UPDATE goal SET title=?,target=?,unit=?,deadline=?,mode=?,typed=? WHERE id=?",
-                    (g["title"], g["target"], g["unit"], g["deadline"], g["mode"], g["typed"], gid))
+            self._q("UPDATE goal SET title=?,target=?,unit=?,deadline=?,mode=?,source=?,match=?,start=?,period=?,"
+                    "status=?,why=?,step=?,base=?,pos=? WHERE id=?",
+                    (g["title"], g["target"], g["unit"], g["deadline"], g["mode"], g["source"], g["match"],
+                     g["start"], g["period"], g["status"], g["why"], g["step"], g["base"], g["pos"], gid))
+            if typed is not None:
+                now = self.goal(gid)["done"]
+                amount = float(typed) if g["source"] == "value" else float(typed) - now
+                if amount or g["source"] == "value":
+                    self.log_goal(gid, amount)
             return self.goal(gid)
 
     def delete_goal(self, gid):
         with self.lock:
             self._q("UPDATE task SET goal_id=NULL WHERE goal_id=?", (gid,))
             self._q("UPDATE habit SET goal_id=NULL WHERE goal_id=?", (gid,))
+            self._q("UPDATE vision SET goal_id=NULL WHERE goal_id=?", (gid,))
+            self._q("DELETE FROM goal_log WHERE goal_id=?", (gid,))
+            self._q("DELETE FROM goal_step WHERE goal_id=?", (gid,))
             self._q("DELETE FROM goal WHERE id=?", (gid,))
 
-    def goal(self, gid):
+    def log_goal(self, gid, amount, day=None, note=""):
+        """Add a number by hand. For a 'value' goal (weight) it is the new reading, not a step."""
         g = self._goal_row(gid)
-        today = self.today()
-        tasks_done = self._all("SELECT COUNT(*) n FROM task WHERE goal_id=? AND done=1", (gid,))[0]["n"]
-        habit_ticks = self._all("SELECT COUNT(*) n FROM habit_tick t JOIN habit h ON h.id=t.habit_id "
-                                "WHERE h.goal_id=?", (gid,))[0]["n"]
-        secs = self._all("SELECT COALESCE(SUM(s.end_ts-s.start_ts),0) s FROM session s JOIN task t "
-                         "ON t.id=s.task_id WHERE t.goal_id=? AND s.kind='focus'", (gid,))[0]["s"]
-        t = self._timer()
-        if t["running"] and t["mode"] == "focus" and t["task_id"] and t["seg_start"]:
-            if self._all("SELECT id FROM task WHERE id=? AND goal_id=?", (t["task_id"], gid)):
-                secs += max(0.0, min(self.clock(), t["end"]) - t["seg_start"])
-        done = {"tasks": tasks_done + habit_ticks, "focus": secs / 3600, "typed": g["typed"]}[g["mode"]]
-        monday = (dt.date.fromisoformat(today) - dt.timedelta(days=dt.date.fromisoformat(today).weekday()))
-        week_secs = self._all("SELECT COALESCE(SUM(s.end_ts-s.start_ts),0) s FROM session s JOIN task t "
-                              "ON t.id=s.task_id WHERE t.goal_id=? AND s.kind='focus' AND s.day>=?",
-                              (gid, monday.isoformat()))[0]["s"]
+        amount = float(amount)
+        if not amount and g["source"] != "value":
+            raise ValueError("type a number")
+        day = day or self.today()
+        dt.date.fromisoformat(day)
+        if day > self.today():
+            raise ValueError("that day has not come yet")
+        cur = self._q("INSERT INTO goal_log(goal_id,day,amount,note,created) VALUES(?,?,?,?,?)",
+                      (gid, day, amount, (note or "").strip()[:200], self.clock()))
+        return {**self.goal(gid), "log_id": cur.lastrowid}
+
+    def delete_goal_log(self, lid):
+        r = self._all("SELECT goal_id FROM goal_log WHERE id=?", (lid,))
+        if not r:
+            raise KeyError(f"no entry {lid}")
+        self._q("DELETE FROM goal_log WHERE id=?", (lid,))
+        return self.goal(r[0]["goal_id"])
+
+    def add_goal_step(self, gid, title):
+        self._goal_row(gid)
+        title = (title or "").strip()
+        if not title:
+            raise ValueError("empty title")
+        with self.lock:
+            pos = self._all("SELECT COALESCE(MAX(pos),0)+1 p FROM goal_step WHERE goal_id=?", (gid,))[0]["p"]
+            self._q("INSERT INTO goal_step(goal_id,title,pos) VALUES(?,?,?)", (gid, title, pos))
+        return self.goal(gid)
+
+    def update_goal_step(self, sid, fields):
+        r = self._all("SELECT * FROM goal_step WHERE id=?", (sid,))
+        if not r or set(fields) - {"title", "done"}:
+            raise ValueError("bad step")
+        st = {**r[0], **fields}
+        st["title"] = (st["title"] or "").strip()
+        if not st["title"]:
+            raise ValueError("empty title")
+        done = bool(st["done"])
+        day = (r[0]["done_day"] or self.today()) if done else None
+        self._q("UPDATE goal_step SET title=?,done=?,done_day=? WHERE id=?", (st["title"], int(done), day, sid))
+        return self.goal(r[0]["goal_id"])
+
+    def delete_goal_step(self, sid):
+        r = self._all("SELECT goal_id FROM goal_step WHERE id=?", (sid,))
+        if not r:
+            raise KeyError(f"no step {sid}")
+        self._q("DELETE FROM goal_step WHERE id=?", (sid,))
+        return self.goal(r[0]["goal_id"])
+
+    def _goal_days(self, g):
+        """day -> how much the goal moved that day (what Nook saw + what was typed in)."""
+        gid, src, words = g["id"], g["source"], self._words(g["match"])
+        out = {}
+
+        def add(day, v):
+            out[day] = out.get(day, 0.0) + v
+
+        for r in self._all("SELECT day, amount FROM goal_log WHERE goal_id=?", (gid,)):
+            add(r["day"], r["amount"])
+        if src in ("linked", "tasks_word"):
+            for r in self._all("SELECT title, day, done_at, goal_id FROM task WHERE done=1"):
+                if r["goal_id"] == gid or (src == "tasks_word" and self._hit(words, r["title"])):
+                    add(day_of(r["done_at"]) if r["done_at"] else r["day"], 1)
+            for r in self._all("SELECT t.day FROM habit_tick t JOIN habit h ON h.id=t.habit_id "
+                               "WHERE h.goal_id=?", (gid,)):
+                add(r["day"], 1)
+        elif src in ("focus_all", "focus_word"):
+            def mine(title, label, goal_id):
+                return src == "focus_all" or goal_id == gid or self._hit(words, title) or self._hit(words, label)
+            for r in self._all("SELECT s.day, s.end_ts-s.start_ts secs, s.label, t.title, t.goal_id FROM session s "
+                               "LEFT JOIN task t ON t.id=s.task_id WHERE s.kind='focus'"):
+                if mine(r["title"], r["label"], r["goal_id"]):
+                    add(r["day"], r["secs"] / 3600)
+            t = self._timer()
+            if t["running"] and t["mode"] == "focus" and t["seg_start"]:
+                task = self._all("SELECT title, goal_id FROM task WHERE id=?", (t["task_id"],)) if t["task_id"] else []
+                title, goal_id = (task[0]["title"], task[0]["goal_id"]) if task else (None, None)
+                if mine(title, t.get("label"), goal_id):
+                    add(day_of(t["seg_start"]), max(0.0, min(self.clock(), t["end"]) - t["seg_start"]) / 3600)
+        elif src == "calendar":
+            today, now = self.today(), min_of(self.clock())
+            hidden = set(self._get("hidden_events", []))
+            for r in self._all("SELECT id, title, day, end_min FROM meeting WHERE day<=?", (today,)):
+                over = r["day"] < today or r["end_min"] <= now          # only once it has happened
+                if over and r["id"] not in hidden and self._hit(words, r["title"]):
+                    add(r["day"], 1)
+        elif src == "calls":
+            # a recorded call where someone else spoke. A no-show has one speaker, so it never counts.
+            for r in self._all("SELECT title, day FROM call WHERE speakers>=2 AND external=1"):
+                if not words or self._hit(words, r["title"]):
+                    add(r["day"], 1)
+        return out
+
+    def _pace(self, g, prog, tgt, days, today):
+        if g["status"] != "active":
+            return None
+        if prog >= tgt:
+            return {"state": "done"}
+        T = dt.date.fromisoformat(today)
+        if g["period"]:
+            if g["period"] == "week":
+                a, n = T - dt.timedelta(days=T.weekday()), 7
+            else:
+                a = T.replace(day=1)
+                n = ((a + dt.timedelta(days=32)).replace(day=1) - a).days
+            per_day = tgt / n
+            exp = per_day * (T - a).days                    # where you should be when today starts
+            state = "ahead" if prog > exp + per_day else "behind" if prog < exp - per_day * 0.5 else "on"
+            return {"state": state, "left": tgt - prog, "per": g["period"]}
+        if not g["deadline"]:
+            return None
+        end = dt.date.fromisoformat(g["deadline"])
+        start = min(dt.date.fromisoformat(g["start"] or g["created"]), end)
+        left_days = (end - T).days
+        if left_days < 0:
+            return {"state": "late"}
+        total = max((end - start).days, 1)
+        el = max(0, min((T - start).days, total))
+        per_day = tgt / total
+        exp = per_day * el
+        state = "ahead" if prog > exp + per_day else "behind" if prog < exp - per_day else "on"
+        need = (tgt - prog) if left_days < 7 else (tgt - prog) / left_days * 7
+        if days is None:                                     # a moving number or steps: average since the start
+            doing = prog / max(el, 1) * 7
+        else:
+            span = min(28, max(el, 1))
+            since = (T - dt.timedelta(days=span - 1)).isoformat()
+            doing = sum(v for d, v in days.items() if since <= d <= today) / span * 7
+        return {"state": state, "need": need, "doing": doing, "week_only": left_days < 7}
+
+    def goal(self, gid, detail=False):
+        g = self._goal_row(gid)
+        today, src = self.today(), g["source"]
+        T = dt.date.fromisoformat(today)
+        monday = (T - dt.timedelta(days=T.weekday())).isoformat()
+        lo = g["start"] or ""
+        if g["period"] == "week":
+            lo = max(lo, monday)
+        elif g["period"] == "month":
+            lo = max(lo, today[:8] + "01")
+        steps = self._all("SELECT * FROM goal_step WHERE goal_id=? ORDER BY pos, id", (gid,))
+        days = None
+        if src == "value":
+            logs = self._all("SELECT amount FROM goal_log WHERE goal_id=? ORDER BY day, id", (gid,))
+            done = logs[-1]["amount"] if logs else g["base"]
+            span = g["target"] - g["base"]
+            tgt, prog = abs(span), (done - g["base"]) / span * abs(span)
+        elif src == "steps":
+            done = prog = float(sum(1 for x in steps if x["done"]))
+            tgt = g["target"] = float(max(len(steps), 1))
+        else:
+            days = self._goal_days(g)
+            done = prog = sum(v for d, v in days.items() if lo <= d <= today)
+            tgt = g["target"]
         g["done"] = done
-        g["pct"] = min(100, round(100 * done / g["target"]))
-        g["days_left"] = ((dt.date.fromisoformat(g["deadline"]) - dt.date.fromisoformat(today)).days
-                          if g["deadline"] else None)
+        g["pct"] = max(0, min(100, round(100 * prog / tgt)))
+        g["days_left"] = (dt.date.fromisoformat(g["deadline"]) - T).days if g["deadline"] else None
+        g["pace"] = self._pace(g, prog, tgt, days, today)
+        g["week"] = sum(v for d, v in (days or {}).items() if monday <= d <= today)
         g["habits"] = [{"id": h["id"], "title": h["title"], "streak": self.habit(h["id"])["streak"]}
                        for h in self._all("SELECT id,title FROM habit WHERE goal_id=? ORDER BY pos", (gid,))]
         g["tasks_today"] = [r["title"] for r in self._all(
             "SELECT title FROM task WHERE goal_id=? AND day=? ORDER BY pos", (gid, today))]
-        g["week_focus"] = week_secs / 60
+        g["steps_total"], g["steps_done"] = len(steps), sum(1 for x in steps if x["done"])
+        if detail:
+            for x in steps:
+                x["done"] = bool(x["done"])
+            g["steps"] = steps
+            g["logs"] = self._all("SELECT * FROM goal_log WHERE goal_id=? ORDER BY day DESC, id DESC LIMIT 60", (gid,))
+            weeks = []
+            for i in range(11, -1, -1):
+                a = T - dt.timedelta(days=T.weekday() + 7 * i)
+                b = (a + dt.timedelta(days=6)).isoformat()
+                weeks.append({"a": a.isoformat(),
+                              "amount": sum(v for d, v in (days or {}).items() if a.isoformat() <= d <= b)})
+            g["weeks"] = weeks if days is not None else []
+            g["today"] = today
         return g
 
     def goals(self):
-        return [self.goal(r["id"]) for r in self._all("SELECT id FROM goal ORDER BY created, id")]
+        return [self.goal(r["id"]) for r in self._all("SELECT id FROM goal ORDER BY pos, created, id")]
+
+    # ---------- recorded calls (filled by the Fathom sync) ----------
+    def save_calls(self, items):
+        with self.lock:
+            for c in items:
+                self._q("INSERT OR REPLACE INTO call(id,title,day,mins,speakers,external,source) VALUES(?,?,?,?,?,?,?)",
+                        (str(c["id"]), c.get("title") or "Call", c["day"], float(c.get("mins") or 0),
+                         int(c.get("speakers") or 0), int(bool(c.get("external"))), c.get("source", "fathom")))
+
+    def calls(self):
+        return self._all("SELECT * FROM call ORDER BY day DESC, id DESC")
+
+    # ---------- vision board ----------
+    def _vision_dir(self):
+        d = os.path.join(self.dir, "vision")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def vision(self):
+        rows = self._all("SELECT * FROM vision ORDER BY pos, id")
+        for r in rows:
+            r["wide"] = bool(r["wide"])
+        return rows
+
+    def _vision_row(self, vid):
+        r = self._all("SELECT * FROM vision WHERE id=?", (vid,))
+        if not r:
+            raise KeyError(f"no card {vid}")
+        return r[0]
+
+    def _vision_add(self, kind, file=None, text=""):
+        with self.lock:
+            pos = self._all("SELECT COALESCE(MAX(pos),0)+1 p FROM vision")[0]["p"]
+            cur = self._q("INSERT INTO vision(kind,file,text,pos,created) VALUES(?,?,?,?,?)",
+                          (kind, file, text, pos, self.clock()))
+            return self._vision_row(cur.lastrowid)
+
+    def add_vision_text(self, text):
+        text = (text or "").strip()
+        if not text:
+            raise ValueError("write something")
+        return self._vision_add("text", text=text[:400])
+
+    def add_vision_image(self, b64):
+        """A picture the page already shrank. Only real JPEG or PNG bytes are kept, under 3 MB."""
+        raw = base64.b64decode((b64 or "").split(",")[-1], validate=False)
+        if len(raw) > VISION_MAX:
+            raise ValueError("that picture is too big")
+        if raw[:3] == bytes([0xFF, 0xD8, 0xFF]):
+            ext = ".jpg"
+        elif raw[:8] == bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
+            ext = ".png"
+        else:
+            raise ValueError("that is not a picture Nook can use")
+        name = secrets.token_hex(12) + ext
+        with open(os.path.join(self._vision_dir(), name), "wb") as f:
+            f.write(raw)
+        return self._vision_add("image", file=name)
+
+    def vision_image(self, vid):
+        r = self._vision_row(vid)
+        if r["kind"] != "image" or not r["file"] or os.path.basename(r["file"]) != r["file"]:
+            raise ValueError("no picture")
+        with open(os.path.join(self._vision_dir(), r["file"]), "rb") as f:
+            raw = f.read()
+        mime = "image/png" if r["file"].endswith(".png") else "image/jpeg"
+        return f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
+
+    def update_vision(self, vid, fields):
+        bad = set(fields) - {"caption", "text", "goal_id", "wide", "pos"}
+        if bad:
+            raise ValueError(f"cannot change {sorted(bad)}")
+        v = {**self._vision_row(vid), **fields}
+        self._q("UPDATE vision SET caption=?,text=?,goal_id=?,wide=?,pos=? WHERE id=?",
+                ((v["caption"] or "").strip()[:200], (v["text"] or "").strip()[:400],
+                 self._check_goal(v["goal_id"]), int(bool(v["wide"])), float(v["pos"]), vid))
+        return self._vision_row(vid)
+
+    def delete_vision(self, vid):
+        r = self._vision_row(vid)
+        self._q("DELETE FROM vision WHERE id=?", (vid,))
+        if r["file"] and os.path.basename(r["file"]) == r["file"]:
+            try:
+                os.remove(os.path.join(self._vision_dir(), r["file"]))
+            except OSError:
+                pass
 
     # ---------- progress ----------
     def progress(self, a, b):

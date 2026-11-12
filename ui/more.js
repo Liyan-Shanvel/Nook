@@ -30,18 +30,25 @@ async function moreLoad() {
     }
     return call('habits_data');
   }
-  if (S.tab === 'goals') return call('goals_data');
+  if (S.tab === 'goals') {
+    if (S.goal) {
+      try { return await api.goal_detail(S.goal); } catch (e) { S.goal = null; }
+    }
+    return call('goals_data');
+  }
+  if (S.tab === 'vision') return call('vision_data');
   if (S.prog === 'year') return call('year_data', (S.pdate || S.today).slice(0, 4));
   const [a, b] = progRange();
   return call('progress_data', a, b);
 }
 function noteGoals(d) {
-  if (d && Array.isArray(d.goals)) S.goalNames = Object.fromEntries(d.goals.map(g => [g.id, g.title]));
+  if (d && Array.isArray(d.goals)) S.goalNames = Object.fromEntries(d.goals.filter(g => !g.status || g.status === 'active' || g.status === 'paused').map(g => [g.id, g.title]));
 }
 
 function moreHTML() {
   if (S.tab === 'habits') return S.habit && S.d.habit ? habitDetailHTML() : habitsHTML();
-  if (S.tab === 'goals') return goalsHTML();
+  if (S.tab === 'goals') return S.goal && S.d.goal ? goalDetailHTML() : goalsHTML();
+  if (S.tab === 'vision') return visionHTML();
   return S.prog === 'year' ? yearHTML() : S.prog === 'month' ? progMonthHTML() : progWeekHTML();
 }
 
@@ -128,36 +135,6 @@ function habitDetailHTML() {
     </div>${grid}</div></div>`;
 }
 
-/* ---------- Goals ---------- */
-function ringSmall(p) {
-  const C = 2 * Math.PI * 27;
-  return `<svg width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="27" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="7"/>
-    ${p > 0 ? `<circle cx="32" cy="32" r="27" fill="none" stroke="${p >= 100 ? 'var(--green)' : '#fff'}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C * p / 100} ${C}" transform="rotate(-90 32 32)"/>` : ''}</svg>`;
-}
-function amount(g) {
-  const money = g.unit === '$';
-  const f = v => money ? '$' + num(v) : num(v);
-  if (g.mode === 'focus') return `${num(g.done)} of ${num(g.target)} hours focused`;
-  return `${f(g.done)} of ${f(g.target)}${!money && g.unit ? ' ' + esc(g.unit) : ''}${g.mode === 'typed' ? ' · you type it in' : ''}`;
-}
-function goalsHTML() {
-  const gs = S.d.goals;
-  const rows = gs.map(g => {
-    const when = g.deadline ? `by ${dayMon(g.deadline)} · ${g.days_left > 0 ? plural(g.days_left, 'day') + ' left' : g.days_left === 0 ? 'today' : plural(-g.days_left, 'day') + ' past'}` : 'no date';
-    const fed = [...g.habits.map(h => `${esc(h.title)} habit${h.streak ? ` · ${h.streak} day streak` : ''}`), ...g.tasks_today.map(t => `${esc(t)} (today)`),
-      ...(g.week_focus >= 1 ? [`${dur(g.week_focus)} focused this week`] : [])];
-    return `<button class="grow" data-act="gedit" data-id="${g.id}">${ringSmall(g.pct)}
-      <div class="info"><div class="tt"><b>${esc(g.title)}</b><span>${when}</span></div>
-        <span class="amt">${amount(g)}</span>
-        <span class="fed">${fed.length ? 'Fed by: ' + fed.join(' · ') : 'Nothing feeds it yet. Right-click a task, or edit a habit, to link it.'}</span></div>
-      <span class="pct" ${g.pct >= 100 ? 'style="color:var(--green)"' : ''}>${g.pct >= 100 ? 'Done' : g.pct + '%'}</span></button>`;
-  }).join('');
-  const head = gs.length ? `<div><div class="bigt">${plural(gs.length, 'goal')}</div><div class="sub">Every task and habit can point at one</div></div>`
-    : `<div><div class="bigt">Goals</div><div class="sub">Something big. Tasks and habits move it.</div></div>`;
-  return `<div class="page"><div class="col760"><div class="head2">${head}<button class="newbtn" data-act="newgoal">${ICON.plus}New goal</button></div>
-    <div class="glist">${rows}</div>${gs.length ? '' : '<div class="empty2">Like "Run a half marathon, 12 long runs by 31 Dec" or "Learn Spanish, 100 hours".</div>'}</div></div>`;
-}
-
 /* ---------- Progress ---------- */
 function psumHTML(p, word) {
   const d = p.focus - p.prev_focus, past = p.b < p.today;
@@ -235,22 +212,7 @@ function renderModal() {
       <div class="f"><label>Feeds a goal (optional)</label><select data-k="goal_id">${goalOptions(m.goal_id)}</select></div>
       <div class="btns"><button class="btn" data-act="mclose">Cancel</button><button class="btn main" data-act="msave">${m.id ? 'Save' : 'Add habit'}</button></div>`;
   } else if (m.kind === 'goal') {
-    const help = { tasks: 'Each task linked to this goal adds 1 when you tick it. Ticks of a linked habit count too.',
-      focus: 'Focus time on linked tasks adds up here, in hours.', typed: 'You type the number in yourself, like money earned.' }[m.mode];
-    h = `<h2>${m.id ? 'Edit goal' : 'New goal'}</h2>
-      <div class="f"><label>What do you want</label><input data-k="title" value="${esc(m.title)}" placeholder="Run a half marathon" id="mfirst"></div>
-      <div class="f"><label>How it moves</label><div class="seg3">${[['tasks', 'Ticked tasks'], ['focus', 'Focus hours'], ['typed', 'I type it']].map(([v, l]) =>
-        `<button class="${m.mode === v ? 'on' : ''}" data-act="mmode" data-v="${v}">${l}</button>`).join('')}</div><span class="help">${help}</span></div>
-      <div class="f"><label>Count</label><div class="two"><input data-k="target" type="number" min="1" value="${esc(m.target)}" placeholder="30">
-        ${m.mode === 'focus' ? '<input value="hours" disabled>' : `<input data-k="unit" value="${esc(m.unit)}" placeholder="${m.mode === 'typed' ? '$' : 'applications'}">`}</div></div>
-      ${m.mode === 'typed' && m.id ? `<div class="f"><label>Now at</label><input data-k="typed" type="number" value="${esc(m.typed)}"></div>` : ''}
-      <div class="f"><label>By (optional)</label><input data-k="deadline" type="date" value="${esc(m.deadline || '')}"></div>
-      <div class="btns"><button class="btn" data-act="mclose">Cancel</button><button class="btn main" data-act="msave">${m.id ? 'Save' : 'Add goal'}</button></div>
-      ${m.id ? '<button class="danger" data-act="mdelgoal">Delete this goal</button>' : ''}`;
-  } else if (m.kind === 'update') {
-    h = `<h2>Nook ${esc((S.upd && S.upd.latest) || '')} is ready</h2>
-      <div class="help">Nook restarts in a few seconds with the new version. Your tasks and settings stay as they are.</div>
-      <div class="btns"><button class="btn" data-act="mclose">Later</button><button class="btn main" data-act="update">Restart now</button></div>`;
+    h = goalFormHTML(m);
   } else if (m.kind === 'settings') {
     const st = S.settings;
     const stepper = (k, label, fmt) => `<div class="set"><span>${label}</span><div class="stepper"><button data-act="sstep" data-k="${k}" data-v="-1">−</button><b>${fmt(st[k])}</b><button data-act="sstep" data-k="${k}" data-v="1">+</button></div></div>`;
@@ -265,6 +227,7 @@ function renderModal() {
         <button class="sw ${st.sounds ? 'on' : ''}" data-act="sswitch" data-k="sounds" title="${st.sounds ? 'On' : 'Off'}"></button></div></div>
       <div class="set"><span>App categories</span><button class="more" data-act="mrules">Edit ›</button></div>
       ${sw('autostart', 'Start with Windows', m.autostart)}
+      ${m.hidden ? `<div class="set"><span>Hidden calendar events</span><button class="more" data-act="showall">${m.hidden} · Show all</button></div>` : ''}
       ${S.upd && S.upd.current ? `<div class="help" style="margin-top:14px">Nook ${esc(S.upd.current)}</div>` : ''}
       <div class="btns"><button class="btn main" data-act="mclose">Done</button></div>`;
   } else if (m.kind === 'sounds') {
@@ -313,14 +276,7 @@ async function saveModal() {
     const goal_id = m.goal_id ? Number(m.goal_id) : null;
     if (m.id) await call('update_habit', m.id, { title: m.title, days: m.days, goal_id });
     else await call('add_habit', m.title, m.days, goal_id);
-  } else if (m.kind === 'goal') {
-    if (!m.title.trim()) return toast('Say what you want');
-    if (!(Number(m.target) > 0)) return toast('Count needs a number above 0');
-    const fields = { title: m.title, target: Number(m.target), unit: m.mode === 'focus' ? 'hours' : m.unit,
-      deadline: m.deadline || null, mode: m.mode };
-    if (m.id) await call('update_goal', m.id, m.mode === 'typed' ? { ...fields, typed: Number(m.typed) || 0 } : fields);
-    else await call('add_goal', fields.title, fields.target, fields.unit, fields.deadline, fields.mode);
-  }
+  } else if (m.kind === 'goal') return saveGoal(m);
   closeModal(); load();
 }
 
@@ -336,26 +292,13 @@ const MORE_ACT = {
   newhabit: () => openModal({ kind: 'habit', title: '', days: [0, 1, 2, 3, 4, 5, 6], goal_id: '', fresh: true }),
   hedit: () => { const h = S.d.habit; openModal({ kind: 'habit', id: h.id, title: h.title, days: [...h.days], goal_id: h.goal_id || '', fresh: true }); },
   hpause: async () => { const h = S.d.habit; await call('update_habit', h.id, { paused: !h.paused }); load(); },
-  hdel: async () => {
-    const h = S.d.habit;
-    if (!(await ask(`Delete "${h.title}" and all its ticks?`))) return;
-    await call('delete_habit', h.id); S.habit = null; load();
-  },
+  hdel: el => twice(el, async () => { await call('delete_habit', S.d.habit.id); S.habit = null; load(); }, 'Click again to delete'),
   mday: el => {
     const i = Number(el.dataset.v), d = S.modal.days;
     S.modal.days = d.includes(i) ? d.filter(x => x !== i) : [...d, i].sort();
     renderModal();
   },
-  newgoal: () => openModal({ kind: 'goal', title: '', target: '', unit: '', deadline: '', mode: 'tasks', typed: 0, fresh: true }),
-  gedit: el => {
-    const g = S.d.goals.find(x => x.id === Number(el.dataset.id)); if (!g) return;
-    openModal({ kind: 'goal', id: g.id, title: g.title, target: g.target, unit: g.unit, deadline: g.deadline || '', mode: g.mode, typed: g.typed, fresh: true });
-  },
-  mmode: el => { S.modal.mode = el.dataset.v; renderModal(); },
-  mdelgoal: async () => {
-    if (!(await ask(`Delete the goal "${S.modal.title}"? Tasks and habits stay, they just stop pointing at it.`))) return;
-    await call('delete_goal', S.modal.id); closeModal(); load();
-  },
+  mdelgoal: el => twice(el, async () => { await call('delete_goal', S.modal.id); S.goal = null; closeModal(); load(); }, 'Click again to delete'),
   mclose: () => closeModal(),
   msave: () => saveModal().catch(() => {}),
   settings: () => openSettings(),
@@ -371,10 +314,7 @@ const MORE_ACT = {
     if (k === 'autostart') { S.modal.autostart = await call('autostart', !S.modal.autostart); renderModal(); return; }
     S.settings = await call('set_setting', k, !S.settings[k]); renderModal();
   },
-  signout: async () => {
-    if (!(await ask('Sign out of Nook? Your tasks stay on this PC.', 'Sign out', false))) return;
-    await call('sign_out'); location.reload();
-  },
+  signout: el => twice(el, async () => { await call('sign_out'); location.reload(); }, 'Click again to sign out'),
   gconnect: async () => {
     S.modal.acct = await call('sign_in').catch(() => S.modal.acct); renderModal();
     const poll = setInterval(async () => {
@@ -415,51 +355,60 @@ const MORE_ACT = {
     const id = Number(el.dataset.id), v = el.dataset.v === '' ? null : Number(el.dataset.v);
     closeMenu(); await call('update_task', id, { goal_id: v }); load();
   },
-  mnewgoal: () => { closeMenu(); MORE_ACT.newgoal(); },
+  mnewgoal: () => { closeMenu(); ACT.newgoal(); },
+  mstart: el => { closeMenu(); return ACT.start(el); },
+  mtoggle: el => { closeMenu(); return ACT.toggle(el); },
+  muntime: el => { closeMenu(); return ACT.untime(el); },
+  mrename: el => { closeMenu(); const t = document.querySelector(`[data-edit="${el.dataset.id}"]`); if (t) renameEl(t); },
+  mmove: async el => { const t = findTask(el.dataset.id); closeMenu(); if (!t) return; await call('update_task', t.id, { day: addDays(t.day, 1) }); load(); },
+  mdup: async el => { closeMenu(); await call('duplicate_task', Number(el.dataset.id)); load(); },
+  mhide: async el => { closeMenu(); await call('hide_event', el.dataset.id); load(); toast('Hidden in Nook. It stays in Google Calendar.'); },
+  showall: async () => { await call('show_all_events'); S.modal.hidden = 0; renderModal(); },
 };
 Object.assign(ACT, MORE_ACT);
 
-/* ---------- right-click a task: which goal does it count toward ---------- */
+/* ---------- right-click: everything you can do with a task, in one small menu ---------- */
 function closeMenu() { S.menu = null; const m = $('#menu'); m.classList.remove('show'); m.innerHTML = ''; }
 document.addEventListener('contextmenu', e => {
-  const el = e.target.closest('.row[data-id], .blk.task[data-id]');
-  if (!el) return;
+  const meet = e.target.closest('[data-meet]');
+  const el = meet ? null : e.target.closest('.row[data-id], .blk.task[data-id], .it[data-id]');
+  if (!meet && !el) return;
   e.preventDefault();
-  const t = findTask(el.dataset.id); if (!t) return;
-  const gs = Object.entries(S.goalNames);
   const m = $('#menu');
-  m.innerHTML = `<span class="cap">Counts toward</span>${gs.length ? gs.map(([id, title]) =>
-    `<button data-act="mgoal" data-id="${t.id}" data-v="${id}"><i>${Number(id) === t.goal_id ? '&#10003;' : ''}</i>${esc(title)}</button>`).join('')
-    + `<button data-act="mgoal" data-id="${t.id}" data-v=""><i>${t.goal_id ? '' : '&#10003;'}</i><span class="q">No goal</span></button>`
-    : `<button class="q" disabled>No goals yet</button><button data-act="mnewgoal"><i>+</i>New goal</button>`}`;
+  if (meet) {
+    m.innerHTML = `<button data-act="mhide" data-id="${esc(meet.dataset.meet)}"><i></i>Hide in Nook</button><span class="mnote">It stays in your Google Calendar.</span>`;
+  } else {
+    const t = findTask(el.dataset.id); if (!t) return;
+    const gs = Object.entries(S.goalNames);
+    const b = (act, label) => `<button data-act="${act}" data-id="${t.id}"><i></i>${label}</button>`;
+    m.innerHTML = `${!t.done && !running(t.id) ? b('mstart', 'Start focus') : ''}${b('mtoggle', t.done ? 'Not done' : 'Done')}${b('mrename', 'Rename')}<hr>
+      ${b('mmove', 'Move to tomorrow')}<label class="mdate"><i></i><span>Move to</span><input type="date" data-mdate="${t.id}" value="${t.day}"></label>
+      ${b('mdup', 'Duplicate')}${t.start_min != null ? b('muntime', 'Remove time') : ''}<hr>
+      <span class="cap">Counts toward</span>${gs.length ? gs.map(([id, title]) =>
+        `<button data-act="mgoal" data-id="${t.id}" data-v="${id}"><i>${Number(id) === t.goal_id ? '&#10003;' : ''}</i>${esc(title)}</button>`).join('')
+        + `<button data-act="mgoal" data-id="${t.id}" data-v=""><i>${t.goal_id ? '' : '&#10003;'}</i><span class="q">No goal</span></button>`
+        : `<button data-act="mnewgoal"><i>+</i>New goal</button>`}<hr>
+      <button class="mdel" data-act="del" data-id="${t.id}"><i></i>Delete</button>`;
+  }
   m.classList.add('show');
-  m.style.left = Math.min(e.clientX, innerWidth - m.offsetWidth - 8) + 'px';
-  m.style.top = Math.min(e.clientY, innerHeight - m.offsetHeight - 8) + 'px';
-  S.menu = t.id;
+  m.style.left = Math.max(8, Math.min(e.clientX, innerWidth - m.offsetWidth - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(e.clientY, innerHeight - m.offsetHeight - 8)) + 'px';
+  S.menu = 1;
+});
+document.addEventListener('change', async e => {
+  const id = e.target.dataset && e.target.dataset.mdate; if (!id || !e.target.value) return;
+  closeMenu(); await call('update_task', Number(id), { day: e.target.value }); load();
 });
 document.addEventListener('mousedown', e => { if (S.menu && !e.target.closest('#menu')) closeMenu(); }, true);
-/* in-app yes/no, instead of the browser's confirm() box. Resolves true only on the main button. */
-function ask(text, yes = 'Delete', bad = true) {
-  if (S.ask) S.ask(false);
-  return new Promise(done => {
-    const box = document.createElement('div'); box.id = 'ask';
-    box.innerHTML = `<div class="card"><p></p><div class="btns"><button class="btn" data-a="0">Cancel</button><button class="btn main ${bad ? 'bad' : ''}" data-a="1"></button></div></div>`;
-    box.querySelector('p').textContent = text; box.querySelector('[data-a="1"]').textContent = yes;
-    const end = v => { S.ask = null; box.remove(); done(v); };
-    S.ask = end;
-    box.addEventListener('click', e => { e.stopPropagation(); const b = e.target.closest('[data-a]'); if (b) end(b.dataset.a === '1'); else if (e.target === box) end(false); });
-    document.body.appendChild(box); box.querySelector('[data-a="1"]').focus();
-  });
-}
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (S.ask) { e.stopPropagation(); S.ask(false); } else if (S.menu) { e.stopPropagation(); closeMenu(); } else if (S.modal) { e.stopPropagation(); closeModal(); }
+  if (S.menu) { e.stopPropagation(); closeMenu(); } else if (S.modal) { e.stopPropagation(); closeModal(); }
 }, true);
 
 /* ---------- account: sign-in screen + settings rows ---------- */
 async function openSettings() {
-  const [a, acct] = await Promise.all([call('autostart').catch(() => false), call('account_status').catch(() => null)]);
-  openModal({ kind: 'settings', autostart: a, acct });
+  const [a, acct, hidden] = await Promise.all([call('autostart').catch(() => false), call('account_status').catch(() => null), call('hidden_events').catch(() => 0)]);
+  openModal({ kind: 'settings', autostart: a, acct, hidden });
 }
 function ago(ts) {
   const m = Math.round((Date.now() / 1000 - ts) / 60);

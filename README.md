@@ -33,7 +33,8 @@ It is free, it has no ads, and your tasks stay on your own computer.
 | **Taskbar timer** | A small timer sits on your Windows taskbar, so you can see your time without opening the app. |
 | **Calendar** | Day, week and month. Drag a task to another day. Your Google Calendar meetings show up next to your tasks (read only). |
 | **Habits** | Tick them off each day and see your streak over the last 12 weeks. |
-| **Goals** | Link tasks and habits to a goal and watch the ring fill. |
+| **Goals** | Say what moves a goal (focus time, tasks, calendar, calls, a number) and Nook counts it. |
+| **Vision** | A board of pictures and words for what you are working for. |
 | **Progress** | How much you focused this week, month and year, tasks done and habits kept. |
 | **Time tracking** | Nook can note which app is in front while you work, so the day view shows where your time really went. Turn it off in Settings. |
 | **Soft sounds** | Pick a calm tone for when focus ends, when a break ends, and when you finish a task. |
