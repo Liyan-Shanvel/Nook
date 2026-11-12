@@ -1,5 +1,5 @@
 # secrets: never in git (build reads them from disk)
-google_client.json
+google_client*.json
 google_token.json
 .env
 *.env

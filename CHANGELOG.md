@@ -2,6 +2,11 @@
 
 All notable changes to Nook. Newest first.
 
+## 1.1.3 (2026-11-12)
+
+- First public release. Google sign-in now uses Nook's own Google app.
+- Privacy policy added (PRIVACY.md).
+
 ## 1.1.2 (2026-11-12)
 
 - Your own sounds: put any `.wav` file in `%LOCALAPPDATA%\FocusOS\sounds` and it shows up in Settings → Sounds. They stay on your PC.
