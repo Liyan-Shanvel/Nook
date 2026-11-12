@@ -4,6 +4,10 @@ All notable changes to Nook. Newest first.
 
 ## 1.2.1 (2026-11-12)
 
+- **The taskbar bar no longer goes blank.** It now runs on its own, apart from the Nook window, so the Claude rings and the timer keep working even if the window freezes or restarts. If the bar ever stops, Nook starts it again within seconds.
+- **The bar shows up faster** after you turn on the PC, because it no longer waits for the window to load.
+- If the Nook window ever freezes, Nook now writes down what was stuck in `hang.log` in its data folder, so the cause can be fixed for good.
+
 - **Work with an AI helper.** Claude (through MCP) or your own bot can now read your day and add, move, finish or delete tasks, tick habits, log goals and start a focus session. It only listens on your own PC and needs a secret key that Nook keeps in its data folder. See "Use Nook with Claude" in the README.
 
 ## 1.2.0 (2026-11-12)

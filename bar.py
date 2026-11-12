@@ -1388,3 +1388,87 @@ def run(store, data_dir, open_app=None):
             pass
         beat()
         time.sleep(min(20, 1 + 2 * fails))      # quick after a planned rebuild, slower if it keeps failing
+
+
+# ---------- the bar as its own process (1.2.1) ----------
+# The bar used to be a thread inside the Nook window's process. When that process stalled (window
+# "Not Responding"), the bar froze too and showed an empty box. Now Nook starts `Nook.exe --bar`:
+# its own process, started first, so a stuck or restarting window never blanks the rings.
+BAR_MUTEX = "Nook_Bar_Mutex"
+QUIT_EVENT = "Nook_Bar_Quit"
+SHOW_EVENT = "FocusOS_Show_Window"      # same name app.py waits on
+
+
+def _k32():
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.CreateMutexW.restype = k.OpenEventW.restype = k.CreateEventW.restype = ctypes.c_void_p
+    k.CreateMutexW.argtypes = [ctypes.c_void_p, wt.BOOL, wt.LPCWSTR]
+    k.CreateEventW.argtypes = [ctypes.c_void_p, wt.BOOL, wt.BOOL, wt.LPCWSTR]
+    k.OpenEventW.argtypes = [wt.DWORD, wt.BOOL, wt.LPCWSTR]
+    k.SetEvent.argtypes = k.CloseHandle.argtypes = [ctypes.c_void_p]
+    k.WaitForSingleObject.argtypes = [ctypes.c_void_p, wt.DWORD]
+    return k
+
+
+def data_dir():
+    return os.environ.get("FOCUSOS_DATA") or os.path.join(os.environ.get("LOCALAPPDATA", ""), "FocusOS")
+
+
+def app_cmd(*args):
+    """Command that starts Nook (the installed exe, or pythonw + app.py from source) with extra args."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *args]
+    exe = sys.executable
+    if exe.lower().endswith("python.exe"):
+        exe = exe[:-len("python.exe")] + "pythonw.exe"
+    return [exe, os.path.join(os.path.dirname(os.path.abspath(__file__)), "app.py"), *args]
+
+
+def open_main():
+    """Bring the Nook window up: poke the running app, or start it if it is not running."""
+    k = _k32()
+    ev = k.OpenEventW(0x0002, False, SHOW_EVENT)          # EVENT_MODIFY_STATE
+    if ev:
+        k.SetEvent(ev)
+        k.CloseHandle(ev)
+    else:
+        subprocess.Popen(app_cmd(), creationflags=0x08000000, close_fds=True)
+
+
+def main_process():
+    """Entry for `Nook.exe --bar`. One bar per user; quits when Nook is quit from the tray."""
+    k = _k32()
+    k.CreateMutexW(None, False, BAR_MUTEX)
+    if ctypes.get_last_error() == 183:                    # ERROR_ALREADY_EXISTS: a bar is running
+        return
+    d = data_dir()
+    os.makedirs(d, exist_ok=True)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import sounds
+    from store import Store
+    store = Store(os.path.join(d, "focusos.db"))
+    sounds.setup(d)
+    store.on_sound = sounds.play
+
+    quit_ev = k.CreateEventW(None, True, False, QUIT_EVENT)
+
+    def wait_quit():
+        k.WaitForSingleObject(quit_ev, 0xFFFFFFFF)
+        os._exit(0)
+
+    def watchdog(every=10, stale=60):
+        """A stuck Tk loop cannot be fixed from inside: leave, and Nook starts a fresh bar in seconds."""
+        last, strikes = time.monotonic(), 0
+        while True:
+            time.sleep(every)
+            now = time.monotonic()
+            woke = now - last > every * 3                 # the PC slept, not a stuck bar
+            last = now
+            strikes = strikes + 1 if (not woke and now - HEART["at"] > stale) else 0
+            if strikes >= 2:
+                log(f"bar stuck (starts={HEART['starts']}), restarting the bar")
+                os._exit(3)
+
+    threading.Thread(target=wait_quit, daemon=True).start()
+    threading.Thread(target=watchdog, daemon=True).start()
+    run(store, d, open_main)

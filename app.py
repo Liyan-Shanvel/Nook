@@ -1,6 +1,7 @@
 """Nook - Focus & Productivity Tool (was FocusOS). Run: pythonw app.py  (or the installed Nook.exe).
-One process: the window, the taskbar bar, the tray icon, app tracking and the Google Calendar sync.
-Flags: --hidden (start without the window, used by Start with Windows)."""
+Two processes: this one (window, tray, app tracking, Google Calendar sync, agent API) and the taskbar
+bar (`--bar`, started by this one and kept alive), so a stuck window never blanks the bar.
+Flags: --hidden (start without the window, used by Start with Windows), --bar (the taskbar bar only)."""
 import ctypes
 import os
 import sys
@@ -12,6 +13,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FROZEN = getattr(sys, "frozen", False)
 RES = getattr(sys, "_MEIPASS", HERE)          # ui/, icon and the Google sign-in key ship here
 sys.path.insert(0, HERE)
+if __name__ == "__main__" and "--bar" in sys.argv:     # the taskbar bar: light, its own process
+    import bar
+    bar.main_process()
+    sys.exit(0)
 from store import Store  # noqa: E402
 import tracker  # noqa: E402
 import account  # noqa: E402
@@ -32,7 +37,9 @@ ICON = os.path.join(RES, "build", "focusos.ico") if not FROZEN else os.path.join
 def log_error(where):
     try:
         with open(LOG, "a", encoding="utf-8") as f:
-            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {where}\n{traceback.format_exc()}\n")
+            tb = traceback.format_exc()
+            tb = "" if tb.startswith("NoneType: None") else tb     # a plain note, not an error
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {where}\n{tb}\n")
     except Exception:
         pass
 
@@ -302,6 +309,99 @@ STARTUP_LNK = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\St
                            "Nook.lnk")
 
 
+def hang_watch(every=2, wait_ms=5000):
+    """Black box for "Nook (Not Responding)". Every 2 s, ask the window to answer. If it does not answer
+    within 5 s, write every thread's Python stack to DATA/hang.log once per freeze, so the next fix is
+    made from evidence. A second guard: if this watcher itself cannot run for 60 s (the whole process is
+    stuck), Python's faulthandler writes the stacks from C. (That one can also fire after the PC sleeps.)"""
+    import faulthandler
+    from ctypes import wintypes as wt
+    u = ctypes.WinDLL("user32", use_last_error=True)
+    u.SendMessageTimeoutW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM, wt.UINT, wt.UINT,
+                                      ctypes.POINTER(ctypes.c_size_t)]
+    u.SendMessageTimeoutW.restype = ctypes.c_ssize_t
+    u.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+    u.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
+    u.GetClassNameW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
+    proc = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    pid = os.getpid()
+
+    def find():
+        found = []
+
+        def cb(h, _):
+            p = wt.DWORD()
+            u.GetWindowThreadProcessId(h, ctypes.byref(p))
+            if p.value == pid:
+                t, c = ctypes.create_unicode_buffer(64), ctypes.create_unicode_buffer(64)
+                u.GetWindowTextW(h, t, 64)
+                u.GetClassNameW(h, c, 64)
+                if t.value.startswith("Nook") and c.value.startswith("WindowsForms"):
+                    found.append(h)
+                    return False
+            return True
+        u.EnumWindows(proc(cb), 0)
+        return found[0] if found else None
+
+    path = os.path.join(DATA, "hang.log")
+    try:
+        if os.path.exists(path) and os.path.getsize(path) > 1024 * 1024:
+            os.replace(path, os.path.join(DATA, "hang.old.log"))
+        f = open(path, "a", encoding="utf-8")
+    except OSError:
+        return
+    hwnd, hung = None, False
+    while True:
+        faulthandler.dump_traceback_later(60, repeat=False, file=f)
+        time.sleep(every)
+        faulthandler.cancel_dump_traceback_later()
+        try:
+            if not hwnd or not u.IsWindow(hwnd):
+                hwnd = find()
+                if not hwnd:
+                    continue
+            res = ctypes.c_size_t()
+            ok = u.SendMessageTimeoutW(hwnd, 0, 0, 0, 0x0002, wait_ms, ctypes.byref(res))   # WM_NULL
+            if ok:
+                if hung:
+                    f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} window answers again\n\n")
+                    f.flush()
+                hung = False
+            elif not hung:
+                hung = True
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Nook {VERSION}: window not answering "
+                        f"(err {ctypes.get_last_error()}). Every thread right now:\n")
+                f.flush()
+                faulthandler.dump_traceback(file=f, all_threads=True)
+                f.write("\n")
+                f.flush()
+        except Exception:
+            log_error("hang_watch")
+            time.sleep(30)
+
+
+def start_bar(bar):
+    """Start `--bar` unless one is running. Returns a function that says whether a bar is alive."""
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.OpenMutexW.restype = ctypes.c_void_p
+    k.OpenMutexW.argtypes = [ctypes.c_uint32, ctypes.c_bool, ctypes.c_wchar_p]
+    k.CloseHandle.argtypes = [ctypes.c_void_p]
+
+    def alive():
+        h = k.OpenMutexW(0x00100000, False, bar.BAR_MUTEX)       # SYNCHRONIZE
+        if h:
+            k.CloseHandle(h)
+        return bool(h)
+
+    if not alive():
+        try:
+            import subprocess
+            subprocess.Popen(bar.app_cmd("--bar"), creationflags=0x08000000, close_fds=True)
+        except Exception:
+            log_error("start bar")
+    return alive
+
+
 def launch_cmd():
     """(program, arguments) that start this app: the installed exe, or pythonw + app.py from source."""
     if FROZEN:
@@ -387,6 +487,10 @@ def main():
             kernel32.SetEvent(ev)
         return
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LiyanShanvel.Nook")
+    import bar
+    bar_quit = kernel32.CreateEventW(None, True, False, bar.QUIT_EVENT)
+    kernel32.ResetEvent(bar_quit)
+    bar_alive = start_bar(bar)
     migrate_old_data()
     os.makedirs(DATA, exist_ok=True)
     store = Store(os.path.join(DATA, "focusos.db"))
@@ -420,6 +524,7 @@ def main():
 
     def quit_app(*_):
         state["quitting"] = True
+        kernel32.SetEvent(bar_quit)             # the bar process quits with Nook
         try:
             win.destroy()
         finally:
@@ -454,42 +559,22 @@ def main():
 
     threading.Thread(target=tray, daemon=True).start()
 
-    def bar_thread():
-        try:
-            import bar
-            bar.run(store, DATA, show)
-        except Exception:
-            log_error("bar")
-
-    threading.Thread(target=bar_thread, daemon=True).start()
-
-    def bar_watchdog(every=10, stale=60):
-        """The bar beats once a second. No beat for a minute = it is stuck, and a stuck Tk thread cannot be
-        restarted from outside, so start a fresh Nook and leave. At most 3 times in a row."""
-        import bar
-        import subprocess
-        last, strikes = time.monotonic(), 0
-        while True:
+    def bar_keeper(every=5):
+        """Restart the bar process if it ever stops (crash, its own stuck-watchdog, killed)."""
+        quick = []
+        while not state["quitting"]:
             time.sleep(every)
+            if state["quitting"] or bar_alive():
+                continue
             now = time.monotonic()
-            woke = now - last > every * 3   # the PC slept: every clock jumped, that is not a stuck bar
-            last = now
-            strikes = strikes + 1 if (not woke and now - bar.HEART["at"] > stale) else 0
-            if strikes < 2:
-                continue
-            if relaunches >= 3:
-                if strikes == 2:
-                    log_error("bar stuck, relaunch limit reached")
-                continue
-            log_error(f"bar stuck (starts={bar.HEART['starts']}), relaunching")
-            exe, args = launch_cmd()
-            cmd = [exe] + ([args.strip('"')] if args else []) + [f"--relaunch={relaunches + 1}"]
-            if not state["visible"]:
-                cmd.append("--hidden")
-            subprocess.Popen(cmd, creationflags=0x08000000, close_fds=True)
-            os._exit(0)
+            quick = [t for t in quick if now - t < 600] + [now]
+            if len(quick) > 5:                  # dying over and over: slow down, do not spin
+                time.sleep(60)
+            log_error(f"bar not running, starting it (restarts in 10 min: {len(quick)})")
+            start_bar(bar)
 
-    threading.Thread(target=bar_watchdog, daemon=True).start()
+    threading.Thread(target=bar_keeper, daemon=True).start()
+    threading.Thread(target=hang_watch, daemon=True).start()
     webview.start(http_server=True)
     os._exit(0)
 
