@@ -19,7 +19,11 @@ $shaFile = "$exe.sha256"
 [IO.File]::WriteAllText((Join-Path $root $shaFile), "$sha  Nook-Setup-$ver.exe`n")
 
 # token from Git's own credential store (same login 'git push' uses)
-$cred = "protocol=https`nhost=github.com`n`n" | git credential fill 2>$null
+# fed from a file through cmd: Windows PowerShell's pipe into git mangles the first line
+$q = Join-Path $env:TEMP "nook-cred-query.txt"
+[IO.File]::WriteAllText($q, "protocol=https`nhost=github.com`n`n", (New-Object Text.UTF8Encoding $false))
+$cred = cmd /c "git credential fill < `"$q`""
+Remove-Item $q -ErrorAction SilentlyContinue
 $token = ($cred | Where-Object { $_ -like "password=*" }) -replace '^password=', ''
 if (-not $token) { throw "no GitHub login found - run 'git push' once so Git signs in, then retry" }
 $h = @{ Authorization = "Bearer $token"; Accept = "application/vnd.github+json"; "User-Agent" = "Nook-release" }
