@@ -29,8 +29,13 @@ if (-not $token) { throw "no GitHub login found - run 'git push' once so Git sig
 $h = @{ Authorization = "Bearer $token"; Accept = "application/vnd.github+json"; "User-Agent" = "Nook-release" }
 
 # tag must exist on GitHub (points at the pushed commit)
-git tag -f $tag | Out-Null
+# git prints progress on stderr; Windows PowerShell + "Stop" would treat that as a failure, so check the exit code instead
+$ErrorActionPreference = "Continue"
+git tag -f $tag 2>&1 | Out-Null
 git push origin $tag -f 2>&1 | Out-Null
+$pushed = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+if ($pushed -ne 0) { throw "could not push tag $tag" }
 
 $body = @{ tag_name = $tag; name = "Nook $ver"; body = $(if ($Notes) { $Notes } else { "Nook $ver" }); draft = $false; prerelease = $false } | ConvertTo-Json
 try {
