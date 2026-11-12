@@ -2,6 +2,10 @@
 
 All notable changes to Nook. Newest first.
 
+## 1.1.2 (2026-11-12)
+
+- Your own sounds: put any `.wav` file in `%LOCALAPPDATA%\FocusOS\sounds` and it shows up in Settings → Sounds. They stay on your PC.
+
 ## 1.1.1 (2026-11-12)
 
 - New name: **Nook**, Focus & Productivity Tool (was FocusOS). Existing installs upgrade in place and keep all data.

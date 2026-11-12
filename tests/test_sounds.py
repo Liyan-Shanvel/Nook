@@ -108,3 +108,18 @@ def test_focus_on_a_name_without_a_task(tmp_path):
     assert s.timer_start(t["id"])["label"] is None   # starting a task clears the name
     with pytest.raises(ValueError):
         s.timer_label("   ")
+
+
+def test_own_sounds_show_up_and_can_be_picked(tmp_path, monkeypatch):
+    import shutil
+    from store import Store
+    monkeypatch.setattr(sounds, "USER", None)
+    sounds.setup(str(tmp_path))
+    shutil.copy(sounds.path_of("tap"), tmp_path / "sounds" / "My chime.wav")
+    assert ("my:My chime", "My chime") in sounds.library()
+    assert sounds.known("my:My chime") and not sounds.known("my:nope") and not sounds.known("my:../tap")
+    s = Store(str(tmp_path / "t.db"))
+    s.set_setting("sound_pick", {"focus_done": "my:My chime"})
+    assert s.settings()["sound_pick"]["focus_done"] == "my:My chime"
+    (tmp_path / "sounds" / "My chime.wav").rename(tmp_path / "gone.bak")
+    assert s.settings()["sound_pick"]["focus_done"] == sounds.DEFAULT["focus_done"]   # file gone -> default

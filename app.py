@@ -136,7 +136,7 @@ class Api:
         return self._s.timer_unlabel()
 
     def sound_styles(self):
-        return [[k, v] for k, v in sounds.LIBRARY.items()]
+        return [[k, v] for k, v in sounds.library()]
 
     def preview_sound(self, name, style):
         sounds.play(name, style)

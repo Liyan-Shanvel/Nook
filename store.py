@@ -127,7 +127,7 @@ class Store:
         s = json.loads(json.dumps(DEFAULTS))
         s.update(self._get("settings", {}))
         pick = s.get("sound_pick") or {}           # old or unknown picks fall back to the default
-        s["sound_pick"] = {m: pick[m] if pick.get(m) in sounds.LIBRARY or pick.get(m) == "off"
+        s["sound_pick"] = {m: pick[m] if sounds.known(pick.get(m)) or pick.get(m) == "off"
                            else sounds.DEFAULT[m] for m in sounds.MOMENTS}
         return s
 
@@ -142,7 +142,7 @@ class Store:
             v = bool(v)
         if k == "sound_pick":
             v = {m: (v or {}).get(m, sounds.DEFAULT[m]) for m in sounds.MOMENTS}
-            if any(x != "off" and x not in sounds.LIBRARY for x in v.values()):
+            if any(x != "off" and not sounds.known(x) for x in v.values()):
                 raise ValueError("unknown sound")
         if k == "rules":
             clean = []
