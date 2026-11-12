@@ -23,6 +23,10 @@ if (Test-Path dist\Nook) {
     Rename-Item dist\Nook ("Nook.old-" + (Get-Date -Format "HHmmss"))
 }
 New-Item -ItemType Directory -Force dist | Out-Null
+# Keep dist clean: older installers move to dist\old (GitHub Releases keeps every version anyway).
+New-Item -ItemType Directory -Force dist\old | Out-Null
+Get-ChildItem dist -File | Where-Object { $_.Name -match '-Setup-' -and $_.Name -notlike "Nook-Setup-$ver.exe*" } |
+    Move-Item -Destination dist\old -Force
 Get-ChildItem dist -Directory -Filter "*.old-*" | ForEach-Object {
     attrib -r "$($_.FullName)\*" /s /d | Out-Null
     Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
