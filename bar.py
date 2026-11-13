@@ -245,6 +245,20 @@ class Usage:
     """Polls Claude usage. The last good reading is cached on disk so a restart shows numbers at once
     without a fetch; a 429 (too many requests) backs off instead of showing an error."""
     CACHE = None     # set by run()
+    _one = None
+    _one_lock = threading.Lock()
+
+    @classmethod
+    def shared(cls, poll=True):
+        """ONE poller per process. The bar rebuilds its Widget after sleep, a screen change or an Explorer
+        restart; each rebuild used to start a new poller and the old ones never stopped, so several asked
+        Anthropic every 90 s, got 429 (too many requests), and the shown reading froze (2026-11-13)."""
+        with cls._one_lock:
+            if cls._one is None:
+                cls._one = cls()
+                if poll:
+                    threading.Thread(target=cls._one.loop, daemon=True).start()
+            return cls._one
 
     def __init__(self):
         self.five = None   # (pct, resets_at)
@@ -297,8 +311,8 @@ class Usage:
             with self.lock:
                 if e.code == 429:
                     ra = e.headers.get("Retry-After")
-                    self.wait = min(900, max(int(ra) if ra and ra.isdigit() else 0, self.wait * 2))
-                    self.error = "" if self.five else "Updating…"  # a throttle is not a reading
+                    self.wait = min(300, max(int(ra) if ra and ra.isdigit() else 0, self.wait * 2))
+                    self.error = "Busy, retrying" if self.five else "Updating…"  # a throttle is not a reading
                 else:
                     self.error = "Sign in to Claude Code" if e.code == 401 else f"Error {e.code}"
         except Exception:
@@ -467,9 +481,7 @@ class Widget:
         self.settings = load_settings()
         self.open_app = open_app or (lambda: None)
         self.has_claude = os.path.exists(CREDS)
-        self.usage = Usage()
-        if self.has_claude:
-            threading.Thread(target=self.usage.loop, daemon=True).start()
+        self.usage = Usage.shared(self.has_claude)
         self.focus = Focus(store)
 
         sw, sh, tb_h = screen_geometry()
@@ -704,7 +716,7 @@ class Widget:
             muted = f"{fmt_min(mins_until(five[1]))} left" if five[1] else "not started"
         else:
             bold, muted = "–", "loading"
-        return bold, (err or muted), five
+        return bold, (muted if err == "Busy, retrying" else (err or muted)), five   # a throttle keeps the time left
 
     def render(self):
         s, W, H, base = S, self.W, self.H, self.base

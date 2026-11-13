@@ -2,6 +2,11 @@
 
 All notable changes to Nook. Newest first.
 
+## 1.2.2 (2026-11-13)
+
+- **Fixed: the Claude rings stopped updating.** After the PC slept or the screen changed, the bar checked your Claude usage several times over, got told "too many requests", and the reading froze. It now checks once, and if Claude is busy it says "Busy, retrying" instead of looking stuck.
+- **New `nook` command** for bots and agents that can run commands: `py nook.py add_task title="Gym" start=18:00`. It uses the running app, never the database.
+
 ## 1.2.1 (2026-11-12)
 
 - **The taskbar bar no longer goes blank.** It now runs on its own, apart from the Nook window, so the Claude rings and the timer keep working even if the window freezes or restarts. If the bar ever stops, Nook starts it again within seconds.
