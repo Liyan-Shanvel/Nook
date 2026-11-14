@@ -121,23 +121,24 @@ function render() {
 
 function renderTop() {
   const tabs = ['Today', 'Calendar', 'Habits', 'Goals', 'Vision', 'Progress'];
-  let date = shortDay(S.today), right = '';
+  let date = shortDay(S.today), right = '', nav = '';
   if (S.tab === 'calendar') {
     if (S.view === 'week') {
       const a = parse(monday(S.date)), b = parse(addDays(monday(S.date), 6));
       date = a.getMonth() === b.getMonth() ? `${a.getDate()} – ${b.getDate()} ${MON[b.getMonth()].slice(0, 3)}`
         : `${a.getDate()} ${MON[a.getMonth()].slice(0, 3)} – ${b.getDate()} ${MON[b.getMonth()].slice(0, 3)}`;
-    } else if (S.view === 'month') { const d = parse(S.date); date = `${MON[d.getMonth()]} ${d.getFullYear()}`; }
+    } else if (S.view === 'month') { const d = parse(S.date); date = `${MON[d.getMonth()].slice(0, 3)} ${d.getFullYear()}`; }
     else date = shortDay(S.date);
-    right = `<div class="seg">${[['day', 'Today'], ['week', 'Week'], ['month', 'Month']].map(([v, l]) =>
-      `<button class="${S.view === v ? 'on' : ''}" data-act="view" data-v="${v}">${l}</button>`).join('')}</div>
+    nav = `<button class="tbtn" data-act="gotoday">Today</button>
       <button class="arrow" data-act="step" data-v="-1" title="Back">${ICON.left}</button>
       <button class="arrow" data-act="step" data-v="1" title="Next">${ICON.right}</button>`;
+    right = `<div class="seg">${[['day', 'Day'], ['week', 'Week'], ['month', 'Month']].map(([v, l]) =>
+      `<button class="${S.view === v ? 'on' : ''}" data-act="view" data-v="${v}">${l}</button>`).join('')}</div>`;
   } else if (S.tab === 'today' && S.d && S.d.focused !== undefined) {
     right = `<span class="goal"><b>${dur(S.d.focused)}</b> of ${dur(S.settings.goal_min)}</span>`;
   } else if (MORE_TABS.includes(S.tab)) ({ date, right } = moreTop());
   right += `<button class="gear" data-act="settings" title="Settings">${ICON.gear}</button>`;
-  $('#top').innerHTML = `<div><span class="brand">deep<i>cus</i><b>.</b></span><span class="date">${date}</span></div>
+  $('#top').innerHTML = `<div><span class="brand">deep<i>cus</i><b>.</b></span>${nav}<span class="date">${date}</span></div>
     <div class="tabs">${tabs.map(t => `<button class="tab ${S.tab === t.toLowerCase() ? 'on' : ''}" data-act="tab" data-v="${t.toLowerCase()}">${t}</button>`).join('')}</div>
     <div class="right">${right}</div>`;
 }
@@ -542,6 +543,7 @@ const ACT = {
   tab: el => { S.tab = el.dataset.v; S.sel = null; S.adding = null; S.habit = null; S.goal = null; if (!S.date) S.date = S.today; load(); },
   view: el => { const v = el.dataset.v; if (S.view === v) S.date = S.today; S.view = v; S.sel = null; S.msel = null; S.adding = null; load(); },
   step: el => step(Number(el.dataset.v)),
+  gotoday: () => { S.date = S.today; S.sel = null; S.msel = null; S.adding = null; load(); },
   start: async el => {
     const x = findTask(el.dataset.id);
     if (!x || x.done || running(x.id)) return;

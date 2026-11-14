@@ -14,6 +14,7 @@ h1{font-weight:700;font-size:28px;letter-spacing:-.02em}
 /* top bar */
 #top{display:flex;align-items:center;height:76px;padding:20px 40px}
 #top>div{flex:1;display:flex;align-items:center}
+#top{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);column-gap:16px}
 .brand{font-weight:800;font-size:17px;margin-right:12px;letter-spacing:-.035em}.brand i{font-style:normal;color:var(--fg2)}.brand b{font-weight:inherit;color:#FF7A3D}
 h1.brand{font-size:inherit;margin-right:0}
 .date{font-size:13px;color:var(--fg2)}
@@ -28,6 +29,10 @@ h1.brand{font-size:inherit;margin-right:0}
 .seg button.on{background:#fff;color:#161618;font-weight:600}
 .arrow{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.07);display:grid;place-items:center;color:var(--fg2)}
 .arrow:hover{color:#fff}
+.tbtn{height:28px;padding:0 11px;border-radius:8px;background:rgba(255,255,255,.07);font-size:12px;font-weight:600;color:var(--fg)}
+.tbtn:hover{background:rgba(255,255,255,.12)}
+#top .tbtn+.arrow{margin-left:8px}#top .arrow+.arrow{margin-left:2px}#top .arrow+.date{margin-left:10px;font-size:14px;font-weight:600;color:var(--fg);white-space:nowrap}
+.brand,.tbtn{white-space:nowrap}
 #main{height:calc(100% - 76px);padding:0 40px}
 
 /* shared rows */

@@ -2,6 +2,10 @@
 
 All notable changes to Deepcus (called Nook before 1.3.0). Newest first.
 
+## 1.3.2 (2026-11-14)
+
+- **Calendar moves like Google Calendar.** A Today button, then back and next arrows, then the date. The arrows step a day, a week or a month, so planning any day ahead is a few clicks. The view switch now reads Day, Week, Month.
+
 ## 1.3.1 (2026-11-14)
 
 - A cleaner name in the top bar: **deepcus.** with an ember full stop. The ring icon stays as the app's icon on your taskbar and desktop.
