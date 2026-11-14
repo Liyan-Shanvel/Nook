@@ -38,19 +38,29 @@ $ErrorActionPreference = "Stop"
 if ($pushed -ne 0) { throw "could not push tag $tag" }
 
 $body = @{ tag_name = $tag; name = "Deepcus $ver"; body = $(if ($Notes) { $Notes } else { "Deepcus $ver" }); draft = $false; prerelease = $false } | ConvertTo-Json
-try {
-    $rel = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$repo/releases" -Headers $h -Body $body -ContentType "application/json"
-} catch {
-    throw "could not create release $tag (does it already exist? bump version.py): $($_.Exception.Message)"
+# safe to run again: an upload that died half way leaves a release with files missing, so reuse it and fill the gaps
+$rel = $null
+try { $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$tag" -Headers $h } catch {}
+if (-not $rel) {
+    try {
+        $rel = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$repo/releases" -Headers $h -Body $body -ContentType "application/json"
+    } catch {
+        throw "could not create release $tag : $($_.Exception.Message)"
+    }
+}
+$have = @($rel.assets | Where-Object { $_.state -eq "uploaded" } | ForEach-Object { $_.name })
+foreach ($a in @($rel.assets | Where-Object { $_.state -ne "uploaded" })) {      # a broken half-upload blocks its name
+    Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/$repo/releases/assets/$($a.id)" -Headers $h | Out-Null
 }
 $upload = $rel.upload_url -replace '\{.*\}$', ''
 foreach ($f in @($exe, $shaFile)) {
-    $name = Split-Path $f -Leaf
-    $type = if ($name -like "*.exe") { "application/octet-stream" } else { "text/plain" }
-    Invoke-RestMethod -Method Post -Uri "$upload`?name=$name" -Headers $h -InFile (Join-Path $root $f) -ContentType $type | Out-Null
-    Write-Host "uploaded $name"
-    $old = $name -replace '^Deepcus-Setup-', 'Nook-Setup-'   # apps older than 1.3.0 look for this name
-    Invoke-RestMethod -Method Post -Uri "$upload`?name=$old" -Headers $h -InFile (Join-Path $root $f) -ContentType $type | Out-Null
-    Write-Host "uploaded $old"
+    $leaf = Split-Path $f -Leaf
+    $type = if ($leaf -like "*.exe") { "application/octet-stream" } else { "text/plain" }
+    # second name: apps older than 1.3.0 look for Nook-Setup-*
+    foreach ($name in @($leaf, ($leaf -replace '^Deepcus-Setup-', 'Nook-Setup-'))) {
+        if ($have -contains $name) { Write-Host "already there $name"; continue }
+        Invoke-RestMethod -Method Post -Uri "$upload`?name=$name" -Headers $h -InFile (Join-Path $root $f) -ContentType $type -TimeoutSec 1800 | Out-Null
+        Write-Host "uploaded $name"
+    }
 }
 Write-Host "Released $tag : $($rel.html_url)"
