@@ -29,6 +29,7 @@ const ICON = {
   play: '<svg width="9" height="9" viewBox="0 0 8 8"><path d="M2 1l5 3-5 3V1z" fill="currentColor"/></svg>',
   x: '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   reset: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.5h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  note: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M2 6h8M2 9h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
   clock: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6.5" r="4.3" stroke="currentColor" stroke-width="1.2"/><path d="M6 4.3v2.4l1.5 1M4.6 1.2h2.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   cal: '<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2.5" width="9" height="8" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 5h9M4 1.2v2M8 1.2v2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
   left: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M7.5 2.5L4 6l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -156,13 +157,15 @@ function taskRow(x, { drag = false, rowAct = '', chip = false } = {}) {
   return `<div class="row ${x.done ? 'done' : ''} ${now ? 'now' : ''}" data-id="${x.id}" ${rowAct ? `data-act="${rowAct}"` : ''} ${drag && !x.done ? 'draggable="true"' : ''}>
     <button class="chk" data-act="toggle" data-id="${x.id}" title="${x.done ? 'Not done' : 'Done'}">${x.done ? ICON.check : now ? ICON.play : ''}</button>
     <span class="t" data-edit="${x.id}">${esc(x.title)}</span>
+    ${x.notes || S.note === x.id ? `<button class="nb ${S.note === x.id ? 'on' : ''}" data-act="note" data-id="${x.id}" title="Description">${ICON.note}</button>` : ''}
     ${x.goal_id && S.goalNames[x.goal_id] ? `<span class="gtag" title="Counts toward ${esc(S.goalNames[x.goal_id])}">${esc(S.goalNames[x.goal_id])}</span>` : ''}
     ${now ? '' : !x.done ? `<button class="play" data-act="start" data-id="${x.id}" title="Start now">${ICON.play}</button>` : ''}
     ${x.done ? '' : S.tlen === x.id
       ? `<input class="lenin" id="tlenin" data-id="${x.id}" value="${x.focus_min || ''}" placeholder="${S.settings.focus}" inputmode="numeric" maxlength="3">`
       : `<button class="len ${x.focus_min ? 'set' : ''}" data-act="tlen" data-id="${x.id}" title="Focus length: scroll or click">${x.focus_min ? x.focus_min + 'm' : ICON.clock}</button>`}
     ${time}
-    <button class="x" data-act="del" data-id="${x.id}" title="Delete">${ICON.x}</button></div>`;
+    <button class="x" data-act="del" data-id="${x.id}" title="Delete">${ICON.x}</button></div>${S.note === x.id
+      ? `<div class="desc"><textarea id="noteta" data-id="${x.id}" maxlength="4000" placeholder="What to do, files, steps">${esc(x.notes || '')}</textarea></div>` : ''}`;
 }
 const LIMIT = { focus: [1, 180], short: [1, 60], long: [1, 90] };
 /* "25", "1:30", "1h30", "90m" -> minutes */
@@ -249,7 +252,7 @@ function blockHTML(x) {
       <button data-act="toggle" data-id="${x.id}">${x.done ? 'Undo' : 'Done'}</button>
       <button data-act="untime" data-id="${x.id}">Remove time</button></span>`
     : x.done ? '<span class="tick">&#10003;</span>' : now ? '<span class="nowtag">NOW</span>' : '';
-  return `<div class="blk task ${x.done ? 'done' : ''} ${now ? 'now' : ''} ${tall ? 'tall' : ''} ${sel ? 'sel' : ''}" data-id="${x.id}" style="top:${y(x.start_min) + 1}px;height:${h}px">
+  return `<div class="blk task ${x.done ? 'done' : ''} ${now ? 'now' : ''} ${tall ? 'tall' : ''} ${sel ? 'sel' : ''}" data-id="${x.id}" ${x.notes ? `title="${esc(x.notes)}"` : ''} style="top:${y(x.start_min) + 1}px;height:${h}px">
     ${tall ? `<span class="t"><span data-edit="${x.id}">${esc(x.title)}</span><small>${time}</small></span>` : `<span class="t" data-edit="${x.id}">${esc(x.title)}</span><small>${time}</small>`}
     ${acts}<i class="grip"></i></div>`;
 }
@@ -568,6 +571,7 @@ const ACT = {
     if (!(await call('update_now').catch(() => false))) { el.textContent = 'Update failed · try later'; }
   },
   tlen: el => { S.tlen = Number(el.dataset.id); S.refocus = '#tlenin'; render(); },
+  note: el => { const id = Number(el.dataset.id); S.note = S.note === id ? null : id; render(); },
   unlabel: async () => { await call('timer_unlabel'); S.refocus = '#focusname'; load(); },
   movecarry: async () => { await call('move_to_today'); load(); },
   openday: el => { S.tab = 'calendar'; S.view = 'day'; S.date = el.dataset.day; S.sel = null; load(); },
@@ -613,6 +617,12 @@ document.addEventListener('wheel', e => {
     }, 450);
   }
 }, { passive: false });
+document.addEventListener('focusout', e => {            // description saves when you click away
+  if (e.target.id !== 'noteta') return;
+  const t = findTask(e.target.dataset.id), v = e.target.value.trim();
+  if (!t || v === (t.notes || '')) return;
+  t.notes = v; call('update_task', t.id, { notes: v }).catch(() => {});
+});
 document.addEventListener('focusout', async e => {
   if (e.target.id !== 'tlenin') return;
   const inp = e.target, id = Number(inp.dataset.id), v = inp.value.trim();
@@ -731,7 +741,7 @@ async function boot() {
   S.date = S.today;
   setInterval(tick, 250);
   setInterval(() => {
-    const typing = document.activeElement && document.activeElement.matches('input, [contenteditable=true]');
+    const typing = document.activeElement && document.activeElement.matches('input, textarea, [contenteditable=true]');
     if (!typing && !S.pop && !S.busy && !S.modal && !S.menu && !S.armed) load().catch(() => {});
   }, 15000);
 }

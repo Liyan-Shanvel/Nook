@@ -60,7 +60,9 @@ def handle(msg, call=http_call):
         res = {"protocolVersion": want, "capabilities": {"tools": {}},
                "serverInfo": {"name": "nook", "version": "1.0"},
                "instructions": "Nook is the user's task, calendar, habit and goal app. Read with get_today "
-                               "before changing things. Delete only when the user asked."}
+                               "before changing things. Delete only when the user asked. A task title is a "
+                               "short to-do title (under 60 characters); put what to do, files and steps in "
+                               "its description. To do a task, read its title and description."}
     elif method == "ping":
         res = {}
     elif method == "tools/list":

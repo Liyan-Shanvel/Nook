@@ -2,6 +2,11 @@
 
 All notable changes to Nook. Newest first.
 
+## 1.2.3 (2026-11-14)
+
+- **Tasks have a description.** Keep the title short and put the detail under it: what to do, which file, the steps. Right-click a task and pick Description. A small lines mark shows on tasks that have one; click it to open or close. It saves when you click away. In Calendar, point at a task to read it.
+- **Agents write short titles.** Claude, bots and the `nook` command can read and write the description, and a title over 60 characters is refused with a note to put the detail in the description. Your own typing has no limit.
+
 ## 1.2.2 (2026-11-13)
 
 - **Fixed: the Claude rings stopped updating.** After the PC slept or the screen changed, the bar checked your Claude usage several times over, got told "too many requests", and the reading froze. It now checks once, and if Claude is busy it says "Busy, retrying" instead of looking stuck.

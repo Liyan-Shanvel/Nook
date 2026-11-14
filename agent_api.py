@@ -54,8 +54,22 @@ def _id(a, key="id"):
         raise ValueError(f"{key} must be a number")
 
 
+TITLE_MAX = 60
+
+
+def _title(v):
+    """Agents must write a title like a to-do list title. Details go in the description. A person typing
+    in the app is not limited; this rule is for agents, which tend to paste the whole brief in."""
+    v = (v or "").strip()
+    if len(v) > TITLE_MAX:
+        raise ValueError(f"title is {len(v)} characters; keep it under {TITLE_MAX}, like a to-do title "
+                         f"(e.g. 'Send 10 nursing home emails'). Put the details, files and steps in description.")
+    return v
+
+
 def _task_out(t):
     t = dict(t)
+    t["description"] = t.pop("notes", None) or ""
     t["start"], t["end"] = _hhmm(t.get("start_min")), _hhmm(t.get("end_min"))
     for k in ("start_min", "end_min", "pos", "created", "done_at"):
         t.pop(k, None)
@@ -93,7 +107,8 @@ def t_unfinished(s, a):
 
 
 def t_add_task(s, a):
-    t = s.add_task(a.get("title"), _day(a.get("day")), _min(a.get("start"), "start"), _min(a.get("end"), "end"))
+    t = s.add_task(_title(a.get("title")), _day(a.get("day")), _min(a.get("start"), "start"),
+                   _min(a.get("end"), "end"), notes=a.get("description"))
     if a.get("goal_id") is not None:
         t = s.update_task(t["id"], {"goal_id": int(a["goal_id"])})
     return _task_out(t)
@@ -103,7 +118,9 @@ def t_update_task(s, a):
     tid = _id(a)
     f = {}
     if "title" in a:
-        f["title"] = a["title"]
+        f["title"] = _title(a["title"])
+    if "description" in a:
+        f["notes"] = a["description"]
     if "day" in a:
         f["day"] = _day(a["day"]) or s.today()
     if "done" in a:
@@ -208,6 +225,11 @@ def _obj(props, req=()):
 
 DAY = {"type": "string", "description": "YYYY-MM-DD. Leave out for today."}
 TIME = {"type": "string", "description": "24h time like 09:30"}
+TITLE = {"type": "string", "maxLength": TITLE_MAX,
+         "description": "Short to-do title, under 60 characters, like 'Send 10 nursing home emails'. "
+                        "No file names, steps or notes here."}
+DESCRIPTION = {"type": "string", "description": "What exactly to do, so the user or an agent can pick the "
+                                                "task up and do it: steps, files, links, who, done-when."}
 GOAL_PROPS = {
     "title": {"type": "string"},
     "target": {"type": "number", "description": "the number to reach"},
@@ -231,12 +253,14 @@ TOOLS = {
                   _obj({"day": DAY})),
     "list_tasks": (t_list_tasks, "Tasks between two days (inclusive).", _obj({"from": DAY, "to": DAY})),
     "list_unfinished": (t_unfinished, "Unfinished tasks left on earlier days.", _obj({})),
-    "add_task": (t_add_task, "Add a task. Give start and end together to put it on the calendar.",
-                 _obj({"title": {"type": "string"}, "day": DAY, "start": TIME, "end": TIME,
+    "add_task": (t_add_task, "Add a task: a short title plus a description of what to do. Give start and "
+                             "end together to put it on the calendar.",
+                 _obj({"title": TITLE, "description": DESCRIPTION, "day": DAY, "start": TIME, "end": TIME,
                        "goal_id": {"type": "integer", "description": "goal this task counts toward"}},
                       ["title"])),
-    "update_task": (t_update_task, "Change a task: rename, move day, set time, mark done, link a goal.",
-                    _obj({"id": {"type": "integer"}, "title": {"type": "string"}, "day": DAY,
+    "update_task": (t_update_task, "Change a task: rename, edit the description, move day, set time, mark "
+                                   "done, link a goal.",
+                    _obj({"id": {"type": "integer"}, "title": TITLE, "description": DESCRIPTION, "day": DAY,
                           "start": TIME, "end": TIME, "clear_time": {"type": "boolean"},
                           "done": {"type": "boolean"}, "goal_id": {"type": ["integer", "null"]}}, ["id"])),
     "delete_task": (t_delete_task, "Delete a task for good. Only when the user asked for it.",

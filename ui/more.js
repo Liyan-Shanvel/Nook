@@ -360,6 +360,7 @@ const MORE_ACT = {
   mtoggle: el => { closeMenu(); return ACT.toggle(el); },
   muntime: el => { closeMenu(); return ACT.untime(el); },
   mrename: el => { closeMenu(); const t = document.querySelector(`[data-edit="${el.dataset.id}"]`); if (t) renameEl(t); },
+  mnote: el => { closeMenu(); S.note = Number(el.dataset.id); S.refocus = '#noteta'; render(); },
   mmove: async el => { const t = findTask(el.dataset.id); closeMenu(); if (!t) return; await call('update_task', t.id, { day: addDays(t.day, 1) }); load(); },
   mdup: async el => { closeMenu(); await call('duplicate_task', Number(el.dataset.id)); load(); },
   mhide: async el => { closeMenu(); await call('hide_event', el.dataset.id); load(); toast('Hidden in Nook. It stays in Google Calendar.'); },
@@ -381,7 +382,7 @@ document.addEventListener('contextmenu', e => {
     const t = findTask(el.dataset.id); if (!t) return;
     const gs = Object.entries(S.goalNames);
     const b = (act, label) => `<button data-act="${act}" data-id="${t.id}"><i></i>${label}</button>`;
-    m.innerHTML = `${!t.done && !running(t.id) ? b('mstart', 'Start focus') : ''}${b('mtoggle', t.done ? 'Not done' : 'Done')}${b('mrename', 'Rename')}<hr>
+    m.innerHTML = `${!t.done && !running(t.id) ? b('mstart', 'Start focus') : ''}${b('mtoggle', t.done ? 'Not done' : 'Done')}${b('mrename', 'Rename')}${el.classList.contains('row') ? b('mnote', 'Description') : ''}<hr>
       ${b('mmove', 'Move to tomorrow')}<label class="mdate"><i></i><span>Move to</span><input type="date" data-mdate="${t.id}" value="${t.day}"></label>
       ${b('mdup', 'Duplicate')}${t.start_min != null ? b('muntime', 'Remove time') : ''}<hr>
       <span class="cap">Counts toward</span>${gs.length ? gs.map(([id, title]) =>

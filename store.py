@@ -95,7 +95,8 @@ def min_of(ts):
 
 
 class Store:
-    FIELDS = ("title", "day", "done", "start_min", "end_min", "goal_id", "focus_min")
+    FIELDS = ("title", "day", "done", "start_min", "end_min", "goal_id", "focus_min", "notes")
+    NOTES_MAX = 4000
 
     def __init__(self, path, clock=time.time):
         self.clock = clock
@@ -112,6 +113,9 @@ class Store:
             self.db.commit()
         if "focus_min" not in cols:                 # a task's own focus length (None = the default)
             self.db.execute("ALTER TABLE task ADD COLUMN focus_min INTEGER")
+            self.db.commit()
+        if "notes" not in cols:                     # the task's description: what to do, for him or an agent
+            self.db.execute("ALTER TABLE task ADD COLUMN notes TEXT")
             self.db.commit()
         if "label" not in {r[1] for r in self.db.execute("PRAGMA table_info(session)")}:
             self.db.execute("ALTER TABLE session ADD COLUMN label TEXT")   # name of a no-task focus
@@ -215,16 +219,24 @@ class Store:
             raise KeyError(f"no task {tid}")
         return self._shape(r[0])
 
-    def add_task(self, title, day=None, start_min=None, end_min=None):
+    @classmethod
+    def _notes(cls, v):
+        v = (v or "").strip()
+        if len(v) > cls.NOTES_MAX:
+            raise ValueError(f"description is too long (max {cls.NOTES_MAX} characters)")
+        return v or None
+
+    def add_task(self, title, day=None, start_min=None, end_min=None, notes=None):
         title = (title or "").strip()
         if not title:
             raise ValueError("empty title")
         day = day or self.today()
         self._check_times(start_min, end_min)
+        notes = self._notes(notes)
         with self.lock:
             pos = self._all("SELECT COALESCE(MAX(pos),0)+1 p FROM task WHERE day=?", (day,))[0]["p"]
-            cur = self._q("INSERT INTO task(title,day,start_min,end_min,pos,created) VALUES(?,?,?,?,?,?)",
-                          (title, day, start_min, end_min, pos, self.clock()))
+            cur = self._q("INSERT INTO task(title,day,start_min,end_min,pos,created,notes) VALUES(?,?,?,?,?,?,?)",
+                          (title, day, start_min, end_min, pos, self.clock(), notes))
             return self.task(cur.lastrowid)
 
     def update_task(self, tid, fields):
@@ -255,9 +267,9 @@ class Store:
                 fm = int(fm)
                 if not 1 <= fm <= 600:
                     raise ValueError("minutes must be 1-600")
-            self._q("UPDATE task SET title=?,day=?,done=?,start_min=?,end_min=?,done_at=?,goal_id=?,focus_min=? "
-                    "WHERE id=?", (new["title"], new["day"], int(new["done"]), new["start_min"],
-                                   new["end_min"], done_at, gid, fm, tid))
+            self._q("UPDATE task SET title=?,day=?,done=?,start_min=?,end_min=?,done_at=?,goal_id=?,focus_min=?,"
+                    "notes=? WHERE id=?", (new["title"], new["day"], int(new["done"]), new["start_min"],
+                                           new["end_min"], done_at, gid, fm, self._notes(new.get("notes")), tid))
             return self.task(tid)
 
     def delete_task(self, tid):
@@ -273,7 +285,7 @@ class Store:
 
     def duplicate_task(self, tid):
         t = self.task(tid)
-        new = self.add_task(t["title"], t["day"])
+        new = self.add_task(t["title"], t["day"], notes=t.get("notes"))
         return self.update_task(new["id"], {"goal_id": t["goal_id"], "focus_min": t["focus_min"]})
 
     def tasks(self, a, b=None):

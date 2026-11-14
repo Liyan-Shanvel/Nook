@@ -41,5 +41,5 @@ def test_main_reports_nook_errors_with_exit_1():
 
 def test_tools_lists_every_tool():
     text = nook.tools_text()
-    assert "add_task(title, day?, start?, end?, goal_id?)" in text
+    assert "add_task(title, description?, day?, start?, end?, goal_id?)" in text
     assert text.count("\n") >= 20
