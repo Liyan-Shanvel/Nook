@@ -2,6 +2,10 @@
 
 All notable changes to Deepcus (called Nook before 1.3.0). Newest first.
 
+## 1.3.1 (2026-11-14)
+
+- A cleaner name in the top bar: **deepcus.** with an ember full stop. The ring icon stays as the app's icon on your taskbar and desktop.
+
 ## 1.3.0 (2026-11-14)
 
 - **Nook is now Deepcus.** New name, new logo: the timer rings sinking to one ember point. Your tasks, habits, goals and settings stay exactly where they are. The update swaps the app, the shortcuts and the icon for you.

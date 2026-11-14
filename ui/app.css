@@ -14,7 +14,7 @@ h1{font-weight:700;font-size:28px;letter-spacing:-.02em}
 /* top bar */
 #top{display:flex;align-items:center;height:76px;padding:20px 40px}
 #top>div{flex:1;display:flex;align-items:center}
-.brand{font-weight:600;font-size:15px;margin-right:12px;letter-spacing:-.01em}.brand i{font-style:normal;color:var(--fg2)}
+.brand{font-weight:800;font-size:17px;margin-right:12px;letter-spacing:-.035em}.brand i{font-style:normal;color:var(--fg2)}.brand b{font-weight:inherit;color:#FF7A3D}
 h1.brand{font-size:inherit;margin-right:0}
 .date{font-size:13px;color:var(--fg2)}
 .tabs{justify-content:center;gap:4px}

@@ -434,7 +434,7 @@ function loginHTML(a) {
   const busy = a && a.busy;
   return `<div class="login">
     <img class="lmark" src="logo.png" width="64" height="64" alt="">
-    <h1 class="brand">deep<i>cus</i></h1>
+    <h1 class="brand">deep<i>cus</i><b>.</b></h1>
     <p class="sub">Your day, one focus at a time.</p>
     <button class="gbtn" data-act="signin" ${busy ? 'disabled' : ''}>${busy ? 'Finish signing in in your browser…' : GLOGO + 'Continue with Google'}</button>
     ${a && a.error ? `<div class="lerr">${esc(a.error)}</div>` : ''}

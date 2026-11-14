@@ -137,7 +137,7 @@ function renderTop() {
     right = `<span class="goal"><b>${dur(S.d.focused)}</b> of ${dur(S.settings.goal_min)}</span>`;
   } else if (MORE_TABS.includes(S.tab)) ({ date, right } = moreTop());
   right += `<button class="gear" data-act="settings" title="Settings">${ICON.gear}</button>`;
-  $('#top').innerHTML = `<div><img class="logo" src="logo.png" width="22" height="22" alt=""><span class="brand">deep<i>cus</i></span><span class="date">${date}</span></div>
+  $('#top').innerHTML = `<div><span class="brand">deep<i>cus</i><b>.</b></span><span class="date">${date}</span></div>
     <div class="tabs">${tabs.map(t => `<button class="tab ${S.tab === t.toLowerCase() ? 'on' : ''}" data-act="tab" data-v="${t.toLowerCase()}">${t}</button>`).join('')}</div>
     <div class="right">${right}</div>`;
 }
