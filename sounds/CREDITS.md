@@ -3,11 +3,11 @@
 The sounds in this folder come from **Notifications** by Aarni Koskela (akx):
 https://github.com/akx/Notifications
 
-Licence: dual CC0 1.0 (public domain) / CC BY 3.0. Nook uses them under CC0, and credits the author anyway.
+Licence: dual CC0 1.0 (public domain) / CC BY 3.0. Deepcus uses them under CC0, and credits the author anyway.
 
-Nook changes: converted to 44.1 kHz 16-bit mono WAV, peaks levelled to -7 dBFS, renamed.
+Deepcus changes: converted to 44.1 kHz 16-bit mono WAV, peaks levelled to -7 dBFS, renamed.
 
-| Nook name | Original file |
+| Deepcus name | Original file |
 |---|---|
 | chord | Chord.wav |
 | calm | Calm.wav |

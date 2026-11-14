@@ -1,4 +1,4 @@
-"""The `nook` command line: argument parsing and output. Never talks to a real Nook."""
+"""The `nook` command line: argument parsing and output. Never talks to a real Deepcus."""
 import json
 import os
 import sys
@@ -35,7 +35,7 @@ def test_main_calls_the_tool_and_prints_json():
 
 def test_main_reports_nook_errors_with_exit_1():
     printed = []
-    rc = nook.main(["get_today"], call=lambda n, a: (False, "Nook is not running."), out=printed.append)
+    rc = nook.main(["get_today"], call=lambda n, a: (False, "Deepcus is not running."), out=printed.append)
     assert rc == 1 and json.loads(printed[0])["ok"] is False
 
 

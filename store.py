@@ -1,4 +1,4 @@
-"""Nook store: one SQLite file.
+"""Deepcus store: one SQLite file.
 
 A task, a calendar block and a focus session are the SAME item seen three ways:
 a task with start_min/end_min is a calendar block; a focus session points at a task.
@@ -314,7 +314,7 @@ class Store:
                                      (a, b or a)) if m["id"] not in hidden]
 
     def hide_event(self, mid, on=True):
-        """Google events are read-only for Nook, so 'remove' means: stop showing it here."""
+        """Google events are read-only for Deepcus, so 'remove' means: stop showing it here."""
         ids = [x for x in self._get("hidden_events", []) if x != mid]
         self._set("hidden_events", ids + [mid] if on else ids)
         return len(self._get("hidden_events", []))
@@ -885,7 +885,7 @@ class Store:
         return self.goal(r[0]["goal_id"])
 
     def _goal_days(self, g):
-        """day -> how much the goal moved that day (what Nook saw + what was typed in)."""
+        """day -> how much the goal moved that day (what Deepcus saw + what was typed in)."""
         gid, src, words = g["id"], g["source"], self._words(g["match"])
         out = {}
 
@@ -1069,7 +1069,7 @@ class Store:
         elif raw[:8] == bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
             ext = ".png"
         else:
-            raise ValueError("that is not a picture Nook can use")
+            raise ValueError("that is not a picture Deepcus can use")
         name = secrets.token_hex(12) + ext
         with open(os.path.join(self._vision_dir(), name), "wb") as f:
             f.write(raw)

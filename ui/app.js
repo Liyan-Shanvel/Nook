@@ -1,5 +1,5 @@
 'use strict';
-/* Nook screens. One store behind it: a task, a calendar block and a focus session are one item. */
+/* Deepcus screens. One store behind it: a task, a calendar block and a focus session are one item. */
 
 const START = 6, END = 24, H = 48, SNAP = 15;           // day grid: 6 AM to midnight, 48 px per hour
 const $ = s => document.querySelector(s);
@@ -137,7 +137,7 @@ function renderTop() {
     right = `<span class="goal"><b>${dur(S.d.focused)}</b> of ${dur(S.settings.goal_min)}</span>`;
   } else if (MORE_TABS.includes(S.tab)) ({ date, right } = moreTop());
   right += `<button class="gear" data-act="settings" title="Settings">${ICON.gear}</button>`;
-  $('#top').innerHTML = `<div><img class="logo" src="logo.png" width="22" height="22" alt=""><span class="brand">Nook</span><span class="date">${date}</span></div>
+  $('#top').innerHTML = `<div><img class="logo" src="logo.png" width="22" height="22" alt=""><span class="brand">deep<i>cus</i></span><span class="date">${date}</span></div>
     <div class="tabs">${tabs.map(t => `<button class="tab ${S.tab === t.toLowerCase() ? 'on' : ''}" data-act="tab" data-v="${t.toLowerCase()}">${t}</button>`).join('')}</div>
     <div class="right">${right}</div>`;
 }
@@ -267,7 +267,7 @@ function sideHTML(isToday) {
       <button class="link" data-act="tracking" data-v="1">Turn it on</button>${meet}</div>`;
   if (S.date > d.today) return `<div class="side">${cap}<div class="quiet">Nothing yet. This day hasn't happened.</div>${meet}</div>`;
   const sm = d.summary;
-  if (sm.total < 1) return `<div class="side">${cap}<div class="quiet">Nothing tracked yet. Nook notes which app is in front while you work. It stays on this PC.</div>${meet}</div>`;
+  if (sm.total < 1) return `<div class="side">${cap}<div class="quiet">Nothing tracked yet. Deepcus notes which app is in front while you work. It stays on this PC.</div>${meet}</div>`;
   const row = (c, l, v) => `<div class="kv"><i class="dot" style="background:${c}"></i><span>${l}</span><b>${dur(v)}</b></div>`;
   return `<div class="side">${cap}<div class="bignum">${dur(sm.total)}</div>
     <div class="bar">${sm.focus ? `<i style="flex:${sm.focus};background:#fff"></i>` : ''}${sm.distracted ? `<i style="flex:${sm.distracted};background:var(--red)"></i>` : ''}${sm.other ? `<i style="flex:${sm.other};background:rgba(255,255,255,.25)"></i>` : ''}</div>

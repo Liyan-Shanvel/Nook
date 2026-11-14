@@ -1,5 +1,5 @@
-"""Nook taskbar bar: Claude usage rings (only if Claude Code is signed in on this PC) + the Nook
-focus timer and today's tasks. Runs inside the Nook app on its own thread; the timer and tasks are the
+"""Deepcus taskbar bar: Claude usage rings (only if Claude Code is signed in on this PC) + the Deepcus
+focus timer and today's tasks. Runs inside the Deepcus app on its own thread; the timer and tasks are the
 app's own (store.py), so the bar, the window and the calendar always agree. Copied from
 E:/Liyan Shanvel/Taskbar Widget/widget.py on 2026-11-11."""
 import ctypes
@@ -350,7 +350,7 @@ def chime():
 
 
 class Focus:
-    """The bar's view of the Nook timer + today's tasks. Reads and writes the app's store."""
+    """The bar's view of the Deepcus timer + today's tasks. Reads and writes the app's store."""
 
     def __init__(self, store):
         self.s, self._at, self.sound = store, 0.0, False
@@ -1403,8 +1403,8 @@ def run(store, data_dir, open_app=None):
 
 
 # ---------- the bar as its own process (1.2.1) ----------
-# The bar used to be a thread inside the Nook window's process. When that process stalled (window
-# "Not Responding"), the bar froze too and showed an empty box. Now Nook starts `Nook.exe --bar`:
+# The bar used to be a thread inside the Deepcus window's process. When that process stalled (window
+# "Not Responding"), the bar froze too and showed an empty box. Now Deepcus starts `Deepcus.exe --bar`:
 # its own process, started first, so a stuck or restarting window never blanks the rings.
 BAR_MUTEX = "Nook_Bar_Mutex"
 QUIT_EVENT = "Nook_Bar_Quit"
@@ -1427,7 +1427,7 @@ def data_dir():
 
 
 def app_cmd(*args):
-    """Command that starts Nook (the installed exe, or pythonw + app.py from source) with extra args."""
+    """Command that starts Deepcus (the installed exe, or pythonw + app.py from source) with extra args."""
     if getattr(sys, "frozen", False):
         return [sys.executable, *args]
     exe = sys.executable
@@ -1437,7 +1437,7 @@ def app_cmd(*args):
 
 
 def open_main():
-    """Bring the Nook window up: poke the running app, or start it if it is not running."""
+    """Bring the Deepcus window up: poke the running app, or start it if it is not running."""
     k = _k32()
     ev = k.OpenEventW(0x0002, False, SHOW_EVENT)          # EVENT_MODIFY_STATE
     if ev:
@@ -1448,7 +1448,7 @@ def open_main():
 
 
 def main_process():
-    """Entry for `Nook.exe --bar`. One bar per user; quits when Nook is quit from the tray."""
+    """Entry for `Deepcus.exe --bar`. One bar per user; quits when Deepcus is quit from the tray."""
     k = _k32()
     k.CreateMutexW(None, False, BAR_MUTEX)
     if ctypes.get_last_error() == 183:                    # ERROR_ALREADY_EXISTS: a bar is running
@@ -1469,7 +1469,7 @@ def main_process():
         os._exit(0)
 
     def watchdog(every=10, stale=60):
-        """A stuck Tk loop cannot be fixed from inside: leave, and Nook starts a fresh bar in seconds."""
+        """A stuck Tk loop cannot be fixed from inside: leave, and Deepcus starts a fresh bar in seconds."""
         last, strikes = time.monotonic(), 0
         while True:
             time.sleep(every)

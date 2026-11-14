@@ -1,6 +1,11 @@
 # Changelog
 
-All notable changes to Nook. Newest first.
+All notable changes to Deepcus (called Nook before 1.3.0). Newest first.
+
+## 1.3.0 (2026-11-14)
+
+- **Nook is now Deepcus.** New name, new logo: the timer rings sinking to one ember point. Your tasks, habits, goals and settings stay exactly where they are. The update swaps the app, the shortcuts and the icon for you.
+- For agents: the `nook` command and the `nook` MCP server keep their names, so nothing you set up breaks.
 
 ## 1.2.3 (2026-11-14)
 

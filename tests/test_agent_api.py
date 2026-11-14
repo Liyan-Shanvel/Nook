@@ -91,7 +91,7 @@ AUTH = {"Authorization": "Bearer secret-token-" + "x" * 32}
 
 
 def test_http_needs_token(srv):
-    assert req(srv, "GET", "/v1/health") == (200, {"ok": True, "app": "Nook", "version": "9.9"})
+    assert req(srv, "GET", "/v1/health") == (200, {"ok": True, "app": "Deepcus", "version": "9.9"})
     assert req(srv, "GET", "/v1/tools")[0] == 401
     assert req(srv, "POST", "/v1/tools/get_today", {}, {"Authorization": "Bearer wrong"})[0] == 401
     code, body = req(srv, "GET", "/v1/tools", headers=AUTH)
@@ -126,6 +126,6 @@ def test_mcp_bridge():
     assert seen == [("add_task", {"title": "A"})]
     assert json.loads(out["result"]["content"][0]["text"]) == {"id": 7} and not out["result"]["isError"]
     err = nook_mcp.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "x"}},
-                          call=lambda n, a: (False, "Nook is not running."))
+                          call=lambda n, a: (False, "Deepcus is not running."))
     assert err["result"]["isError"]
     assert nook_mcp.handle({"jsonrpc": "2.0", "id": 5, "method": "bogus"})["error"]["code"] == -32601

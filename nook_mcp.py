@@ -1,10 +1,10 @@
-"""MCP bridge: lets Claude (or any MCP client) use Nook's tools.
+"""MCP bridge: lets Claude (or any MCP client) use Deepcus's tools.
 
 Speaks MCP over stdio (one JSON-RPC message per line) and passes each tool call to the
-running Nook app on 127.0.0.1. Standard library only.
+running Deepcus app on 127.0.0.1. Standard library only.
 
 Add to Claude Code:   claude mcp add nook -s user -- py E:\\Apps\\FocusOS\\nook_mcp.py
-Needs Nook to be open. The token is read from %LOCALAPPDATA%\\FocusOS\\agent_token.txt
+Needs Deepcus to be open. The token is read from %LOCALAPPDATA%\\FocusOS\\agent_token.txt
 (or NOOK_API_TOKEN); the port from NOOK_API_PORT (default 47811).
 """
 import json
@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import agent_api  # noqa: E402  (tool list, so tools/list works even while Nook is closed)
+import agent_api  # noqa: E402  (tool list, so tools/list works even while Deepcus is closed)
 
 PROTOCOL = "2025-06-18"
 DATA = os.environ.get("FOCUSOS_DATA") or os.path.join(os.environ.get("LOCALAPPDATA", ""), "FocusOS")
@@ -46,7 +46,7 @@ def http_call(name, args):
         except ValueError:
             body = {"ok": False, "error": f"HTTP {e.code}"}
     except (urllib.error.URLError, OSError):
-        return False, "Nook is not running. Open Nook and try again."
+        return False, "Deepcus is not running. Open Deepcus and try again."
     return (True, body["result"]) if body.get("ok") else (False, body.get("error") or "failed")
 
 
@@ -59,7 +59,7 @@ def handle(msg, call=http_call):
         want = (msg.get("params") or {}).get("protocolVersion") or PROTOCOL
         res = {"protocolVersion": want, "capabilities": {"tools": {}},
                "serverInfo": {"name": "nook", "version": "1.0"},
-               "instructions": "Nook is the user's task, calendar, habit and goal app. Read with get_today "
+               "instructions": "Deepcus is the user's task, calendar, habit and goal app. Read with get_today "
                                "before changing things. Delete only when the user asked. A task title is a "
                                "short to-do title (under 60 characters); put what to do, files and steps in "
                                "its description. To do a task, read its title and description."}

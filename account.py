@@ -21,7 +21,7 @@ PAST, AHEAD = 14, 60          # days of calendar kept in sync around today
 
 
 def allowed(email):
-    """Any real Google account email (Nook is open to everyone; one account per install)."""
+    """Any real Google account email (Deepcus is open to everyone; one account per install)."""
     return isinstance(email, str) and email.count("@") == 1 and "." in email.split("@")[1]
 
 
@@ -67,7 +67,7 @@ class Account:
                 "skipped": bool(self.s._get("google_skip", False))}
 
     def skip(self):
-        """Use Nook without Google. Settings can still connect it later."""
+        """Use Deepcus without Google. Settings can still connect it later."""
         self.s._set("google_skip", True)
         return self.status()
 
@@ -90,7 +90,7 @@ class Account:
     def sign_in(self):
         """Opens the browser for Google sign-in. Runs in the background; the screen polls status()."""
         if not os.path.exists(CLIENT):
-            self.error = "This copy of Nook has no Google sign-in key yet (google_client.json)."
+            self.error = "This copy of Deepcus has no Google sign-in key yet (google_client.json)."
             return self.status()
         with self.lock:
             if self.busy:
@@ -107,7 +107,7 @@ class Account:
             creds = flow.run_local_server(
                 port=0, open_browser=True, timeout_seconds=300, prompt="select_account",
                 authorization_prompt_message="",
-                success_message="Signed in. You can close this tab and go back to Nook.")
+                success_message="Signed in. You can close this tab and go back to Deepcus.")
             info = AuthorizedSession(creds).get(USERINFO, timeout=20).json()
             email = (info.get("email") or "").lower()
             if not (info.get("email_verified") and allowed(email)):
@@ -116,7 +116,7 @@ class Account:
             owner = self.s._get("owner", None)
             if owner and owner != email:
                 self._revoke(creds)
-                raise PermissionError(f"This Nook belongs to {owner}. Sign in with that account.")
+                raise PermissionError(f"This Deepcus belongs to {owner}. Sign in with that account.")
             self._save(creds)
             self.s._set("owner", email)
             self.s._set("account", {"email": email, "name": info.get("name") or email.split("@")[0]})

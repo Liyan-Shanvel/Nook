@@ -1,18 +1,18 @@
-# Contributing to Nook
+# Contributing to Deepcus
 
-Thanks for helping. Nook stays small on purpose, so please read this before you open a pull request.
+Thanks for helping. Deepcus stays small on purpose, so please read this before you open a pull request.
 
 ## Reporting a bug
 
 Open an [issue](https://github.com/Liyan-Shanvel/Nook/issues/new/choose) with:
 
-- your Nook version (Settings, bottom of the page) and your Windows version
+- your Deepcus version (Settings, bottom of the page) and your Windows version
 - what you did, what you expected, and what happened
 - a screenshot if it is about how something looks
 
 ## Suggesting a feature
 
-Open a feature request and say what problem it solves for you. Nook only adds things people use every day, so a clear "why" matters more than a detailed "how".
+Open a feature request and say what problem it solves for you. Deepcus only adds things people use every day, so a clear "why" matters more than a detailed "how".
 
 ## Pull requests
 

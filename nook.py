@@ -1,4 +1,4 @@
-"""Nook from the command line, for any bot or agent that can run a command.
+"""Deepcus from the command line, for any bot or agent that can run a command.
 
   py nook.py tools                                  list every tool and its inputs
   py nook.py get_today
@@ -6,8 +6,8 @@
   py nook.py tick_habit id=2
   py nook.py add_task '{"title": "Gym", "start": "18:00", "end": "19:00"}'
 
-Talks to the running Nook app on this PC (127.0.0.1) with the key from Nook's data folder, so
-nothing touches the database directly. Prints JSON. Exit code 0 = done, 1 = Nook said no, 2 = bad input.
+Talks to the running Deepcus app on this PC (127.0.0.1) with the key from Deepcus's data folder, so
+nothing touches the database directly. Prints JSON. Exit code 0 = done, 1 = Deepcus said no, 2 = bad input.
 """
 import json
 import os

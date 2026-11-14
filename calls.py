@@ -65,7 +65,7 @@ def fetch(key, after, get=None):
 
 def _get(url, key):
     req = urllib.request.Request(url, headers={"X-Api-Key": key, "Accept": "application/json",
-                                               "User-Agent": "Nook"})
+                                               "User-Agent": "Deepcus"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read().decode("utf-8"))

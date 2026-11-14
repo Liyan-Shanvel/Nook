@@ -1,4 +1,4 @@
-"""Nook sounds: a small library of soft notification tones (see sounds/CREDITS.md), plus the person's own.
+"""Deepcus sounds: a small library of soft notification tones (see sounds/CREDITS.md), plus the person's own.
 
 Three moments, each can use any sound in the library (or none):
   focus_done  - a focus timer ended

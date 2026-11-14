@@ -1,4 +1,4 @@
-"""Nook - Focus & Productivity Tool (was FocusOS). Run: pythonw app.py  (or the installed Nook.exe).
+"""Deepcus - Focus & Productivity Tool (was FocusOS). Run: pythonw app.py  (or the installed Deepcus.exe).
 Two processes: this one (window, tray, app tracking, Google Calendar sync, agent API) and the taskbar
 bar (`--bar`, started by this one and kept alive), so a stuck window never blanks the bar.
 Flags: --hidden (start without the window, used by Start with Windows), --bar (the taskbar bar only)."""
@@ -306,11 +306,12 @@ class Api:
 
 
 STARTUP_LNK = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup",
-                           "Nook.lnk")
+                           "Deepcus.lnk")
+OLD_STARTUP_LNK = os.path.join(os.path.dirname(STARTUP_LNK), "Nook.lnk")      # the name before 1.3.0
 
 
 def hang_watch(every=2, wait_ms=5000):
-    """Black box for "Nook (Not Responding)". Every 2 s, ask the window to answer. If it does not answer
+    """Black box for "Deepcus (Not Responding)". Every 2 s, ask the window to answer. If it does not answer
     within 5 s, write every thread's Python stack to DATA/hang.log once per freeze, so the next fix is
     made from evidence. A second guard: if this watcher itself cannot run for 60 s (the whole process is
     stuck), Python's faulthandler writes the stacks from C. (That one can also fire after the PC sleeps.)"""
@@ -336,7 +337,7 @@ def hang_watch(every=2, wait_ms=5000):
                 t, c = ctypes.create_unicode_buffer(64), ctypes.create_unicode_buffer(64)
                 u.GetWindowTextW(h, t, 64)
                 u.GetClassNameW(h, c, 64)
-                if t.value.startswith("Nook") and c.value.startswith("WindowsForms"):
+                if t.value.startswith("Deepcus") and c.value.startswith("WindowsForms"):
                     found.append(h)
                     return False
             return True
@@ -369,7 +370,7 @@ def hang_watch(every=2, wait_ms=5000):
                 hung = False
             elif not hung:
                 hung = True
-                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Nook {VERSION}: window not answering "
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Deepcus {VERSION}: window not answering "
                         f"(err {ctypes.get_last_error()}). Every thread right now:\n")
                 f.flush()
                 faulthandler.dump_traceback(file=f, all_threads=True)
@@ -486,7 +487,13 @@ def main():
         if ev:
             kernel32.SetEvent(ev)
         return
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LiyanShanvel.Nook")
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("LiyanShanvel.Deepcus")
+    if os.path.exists(OLD_STARTUP_LNK):         # renamed from Nook: keep "start with Windows" working
+        try:
+            make_startup_shortcut()
+            os.remove(OLD_STARTUP_LNK)
+        except Exception:
+            pass
     import bar
     bar_quit = kernel32.CreateEventW(None, True, False, bar.QUIT_EVENT)
     kernel32.ResetEvent(bar_quit)
@@ -507,7 +514,7 @@ def main():
 
     import webview
     hidden = "--hidden" in sys.argv
-    win = webview.create_window("Nook", os.path.join(RES, "ui", "index.html"), js_api=Api(store, acct, upd),
+    win = webview.create_window("Deepcus", os.path.join(RES, "ui", "index.html"), js_api=Api(store, acct, upd),
                                 width=1320, height=860, min_size=(1100, 700), background_color="#161618",
                                 hidden=hidden)
     state = {"quitting": False, "visible": not hidden}
@@ -524,7 +531,7 @@ def main():
 
     def quit_app(*_):
         state["quitting"] = True
-        kernel32.SetEvent(bar_quit)             # the bar process quits with Nook
+        kernel32.SetEvent(bar_quit)             # the bar process quits with Deepcus
         try:
             win.destroy()
         finally:
@@ -534,7 +541,7 @@ def main():
         if state["quitting"]:
             return True
         state["visible"] = False
-        win.hide()                          # closing the window keeps Nook running in the tray
+        win.hide()                          # closing the window keeps Deepcus running in the tray
         return False
 
     win.events.closing += on_closing
@@ -551,9 +558,9 @@ def main():
         try:
             import pystray
             from PIL import Image
-            menu = pystray.Menu(pystray.MenuItem("Open Nook", lambda: show(), default=True),
-                                pystray.MenuItem("Quit Nook", quit_app))
-            pystray.Icon("Nook", Image.open(ICON), "Nook", menu).run()
+            menu = pystray.Menu(pystray.MenuItem("Open Deepcus", lambda: show(), default=True),
+                                pystray.MenuItem("Quit Deepcus", quit_app))
+            pystray.Icon("Deepcus", Image.open(ICON), "Deepcus", menu).run()
         except Exception:
             log_error("tray")
 

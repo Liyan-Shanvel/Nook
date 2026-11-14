@@ -5,7 +5,7 @@ import updater
 
 
 def fake_github(tag, blob, sha=None, size=None):
-    name = f"Nook-Setup-{tag.lstrip('v')}.exe"
+    name = f"Deepcus-Setup-{tag.lstrip('v')}.exe"
     rel = {"tag_name": tag, "assets": [
         {"name": name, "size": len(blob) if size is None else size, "browser_download_url": "u/exe"},
         {"name": name + ".sha256", "size": 64, "browser_download_url": "u/sha"}]}

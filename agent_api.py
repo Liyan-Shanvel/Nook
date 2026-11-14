@@ -1,10 +1,10 @@
-"""Agent API: lets an AI helper (Claude via MCP, or any bot on this PC) read and change Nook.
+"""Agent API: lets an AI helper (Claude via MCP, or any bot on this PC) read and change Deepcus.
 
 A small HTTP server inside the running app, on 127.0.0.1 only. Every call needs the token
 kept in <data>/agent_token.txt. The tool list below is the one source for both this server
 and the MCP bridge (nook_mcp.py), so the two never drift apart.
 
-  GET  /v1/health          -> {"ok": true, "app": "Nook", "version": ...}   (no token needed)
+  GET  /v1/health          -> {"ok": true, "app": "Deepcus", "version": ...}   (no token needed)
   GET  /v1/tools           -> [{"name", "description", "input_schema"}]
   POST /v1/tools/<name>    body = the tool's arguments as JSON -> {"ok": true, "result": ...}
 """
@@ -328,7 +328,7 @@ def make_server(store, tok, version="", port=PORT, log=None):
     lock = threading.Lock()     # one agent call at a time; the store has its own lock too
 
     class H(BaseHTTPRequestHandler):
-        server_version = "Nook"
+        server_version = "Deepcus"
 
         def log_message(self, *a):
             pass
@@ -359,7 +359,7 @@ def make_server(store, tok, version="", port=PORT, log=None):
         def do_GET(self):
             if self.path == "/v1/health":
                 if self._guard(need_token=False):
-                    self._send(200, {"ok": True, "app": "Nook", "version": version})
+                    self._send(200, {"ok": True, "app": "Deepcus", "version": version})
             elif self.path == "/v1/tools":
                 if self._guard():
                     self._send(200, {"ok": True, "tools": tool_list()})
@@ -367,16 +367,17 @@ def make_server(store, tok, version="", port=PORT, log=None):
                 self._send(404, {"ok": False, "error": "not found"})
 
         def do_POST(self):
-            if not self.path.startswith("/v1/tools/"):
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > MAX_BODY:
+                return self._send(413, {"ok": False, "error": "too big"})
+            raw = self.rfile.read(n) if n else b""      # take the body before any "no": answering while the
+            if not self.path.startswith("/v1/tools/"):  # caller is still sending resets the connection on Windows
                 return self._send(404, {"ok": False, "error": "not found"})
             if not self._guard():
                 return
             name = self.path[len("/v1/tools/"):]
-            n = int(self.headers.get("Content-Length") or 0)
-            if n > MAX_BODY:
-                return self._send(413, {"ok": False, "error": "too big"})
             try:
-                args = json.loads(self.rfile.read(n) or b"{}") if n else {}
+                args = json.loads(raw or b"{}")
             except ValueError:
                 return self._send(400, {"ok": False, "error": "body is not JSON"})
             try:
@@ -396,7 +397,7 @@ def make_server(store, tok, version="", port=PORT, log=None):
 
 
 def serve(store, data_dir, version="", log=None):
-    """Run forever in a daemon thread. A busy port just turns the API off; Nook keeps working."""
+    """Run forever in a daemon thread. A busy port just turns the API off; Deepcus keeps working."""
     try:
         srv = make_server(store, token(data_dir), version, log=log)
     except OSError as e:

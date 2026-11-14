@@ -1,4 +1,4 @@
-# PyInstaller recipe for Nook. Build: py -m PyInstaller build/focusos.spec --noconfirm (from the app folder)
+# PyInstaller recipe for Deepcus. Build: py -m PyInstaller build/focusos.spec --noconfirm (from the app folder)
 import os
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
@@ -20,10 +20,10 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
-    name="Nook",
+    name="Deepcus",
     icon=os.path.join(ROOT, "build", "focusos.ico"),
     version=os.path.join(ROOT, "build", "version.txt"),
     console=False,
     upx=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="Nook", upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, name="Deepcus", upx=False)

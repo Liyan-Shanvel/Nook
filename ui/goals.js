@@ -6,14 +6,14 @@ Object.assign(S, { goal: null, vimg: new Map(), vfull: null, vadd: false });
 
 /* what moves a goal: [key, name in the picker, one plain line] */
 const SOURCES = [
-  ['hand', 'I add it myself', 'Press + on the goal each time. Good for money, books, anything Nook cannot see.'],
+  ['hand', 'I add it myself', 'Press + on the goal each time. Good for money, books, anything Deepcus cannot see.'],
   ['calls', 'Sales calls, from Fathom', 'Counts each recorded call where the other person showed up. A no-show does not count.'],
   ['calendar', 'Calendar events with a word', 'Counts each calendar event with that word in its name, once it is over.'],
   ['focus_all', 'All my focus time', 'Every focus session adds its hours.'],
   ['focus_word', 'Focus on some tasks', 'Focus time on tasks with the word in their name, or on tasks you link by right-click.'],
   ['linked', 'Tasks and habits I link', 'Each linked task or habit adds 1 when you tick it. Right-click a task to link it.'],
   ['tasks_word', 'Ticked tasks with a word', 'Each ticked task with that word in its name adds 1.'],
-  ['value', 'A number that moves', 'Like body weight. You log the new number and Nook shows how far you have come.'],
+  ['value', 'A number that moves', 'Like body weight. You log the new number and Deepcus shows how far you have come.'],
   ['steps', 'A list of steps', 'Break it into steps and tick them off.'],
 ];
 const WORD_SRC = { calendar: 'Word in the event name', tasks_word: 'Word in the task name',
@@ -80,7 +80,7 @@ function goalsHTML() {
   const act = by('active');
   const sec = (name, list) => list.length ? `<span class="cap gsec">${name}</span>${list.map(goalRow).join('')}` : '';
   const head = act.length ? `<div><div class="bigt">${plural(act.length, 'goal')}</div><div class="sub">Click one to see it. Press + when you move it.</div></div>`
-    : `<div><div class="bigt">Goals</div><div class="sub">Something big you want. Nook counts it for you where it can.</div></div>`;
+    : `<div><div class="bigt">Goals</div><div class="sub">Something big you want. Deepcus counts it for you where it can.</div></div>`;
   return `<div class="page"><div class="col760"><div class="head2">${head}<button class="newbtn" data-act="newgoal">${ICON.plus}New goal</button></div>
     <div class="glist">${act.map(goalRow).join('')}${sec('Paused', by('paused'))}${sec('Done', by('done'))}${sec('Archived', by('archived'))}</div>
     ${gs.length ? '' : '<div class="empty2">Like "30 sales calls by 31 Dec", "120 focused hours" or "Gain 3 kg".</div>'}</div></div>`;
@@ -91,7 +91,7 @@ function fathomHTML(g) {
   if (g.source !== 'calls') return '';
   const c = S.d.calls || {};
   if (!c.connected) return `<div class="note"><b>Connect Fathom to count calls</b>
-      <span>In Fathom open Settings, then API Access, make a key and paste it here. It stays on this PC. Nook only reads.</span>
+      <span>In Fathom open Settings, then API Access, make a key and paste it here. It stays on this PC. Deepcus only reads.</span>
       <div class="inrow"><input id="fkey" type="password" placeholder="Fathom API key"><button class="btn main" data-act="fconnect">Connect</button></div></div>`;
   const line = c.error ? `Could not sync: ${esc(c.error)}` : `${plural(c.count || 0, 'recording')} seen, ${c.real || 0} real ${c.real === 1 ? 'call' : 'calls'}${c.at ? ' · synced ' + ago(c.at) : ''}`;
   return `<div class="fline"><span>Fathom · ${line}</span><button data-act="fsync">Sync now</button><button data-act="fdisconnect">Disconnect</button></div>`;
@@ -115,7 +115,7 @@ function goalDetailHTML() {
   const hist = isSteps ? '' : `<span class="cap" style="margin-top:${bars ? 28 : 0}px">${isVal ? 'Readings' : 'Added by hand'}</span>
     ${g.logs.length ? g.logs.map(l => `<div class="glrow"><span>${dayMon(l.day)}</span><b>${isVal || l.amount < 0 ? '' : '+'}${gnum(g, l.amount)}</b><small>${esc(l.note)}</small>
       <button class="x" data-act="glogdel" data-id="${l.id}" title="Remove">${ICON.x}</button></div>`).join('')
-      : `<div class="quiet">${isVal ? 'No readings yet. Log the first one.' : 'Nothing yet. Whatever Nook counts by itself is not listed here.'}</div>`}`;
+      : `<div class="quiet">${isVal ? 'No readings yet. Log the first one.' : 'Nothing yet. Whatever Deepcus counts by itself is not listed here.'}</div>`}`;
   const st = g.status;
   return `<div class="page"><div class="hd"><div class="l" style="gap:26px">
       <div style="display:flex;flex-direction:column;gap:10px">
@@ -272,7 +272,7 @@ async function addPicture(file) {                  // shrink in the page, so the
     const data = c.toDataURL('image/jpeg', 0.85);
     const row = await call('add_vision_image', data);
     S.vimg.set(row.id, data);
-  } catch (e) { toast('Nook could not read that picture'); } finally { URL.revokeObjectURL(url); }
+  } catch (e) { toast('Deepcus could not read that picture'); } finally { URL.revokeObjectURL(url); }
 }
 async function addPictures(files) { for (const f of [...files]) await addPicture(f); load(); }
 

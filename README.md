@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="ui/logo.png" width="88" alt="Nook logo">
+<img src="ui/logo.png" width="88" alt="Deepcus logo">
 
-# Nook
+# Deepcus
 
 **Focus & Productivity Tool for Windows**
 
@@ -12,13 +12,13 @@ A quiet place to plan your day, focus on one thing, and see where your time real
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-white?labelColor=161618)](#install)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-noncommercial-white?labelColor=161618)](LICENSE)
 
-<img src="docs/screenshots/today.png" alt="Nook, the Today screen" width="900">
+<img src="docs/screenshots/today.png" alt="Deepcus, the Today screen" width="900">
 
 </div>
 
-## Why Nook
+## Why Deepcus
 
-Most to-do apps show you everything at once. Nook shows you today.
+Most to-do apps show you everything at once. Deepcus shows you today.
 
 You pick a task, press start, and the big ring counts down. Everything else waits. When the time is up, a soft sound tells you to take a break. At the end of the day you can see what you actually did, not just what you planned.
 
@@ -33,12 +33,12 @@ It is free, it has no ads, and your tasks stay on your own computer.
 | **Taskbar timer** | A small timer sits on your Windows taskbar, so you can see your time without opening the app. |
 | **Calendar** | Day, week and month. Drag a task to another day. Your Google Calendar meetings show up next to your tasks (read only). |
 | **Habits** | Tick them off each day and see your streak over the last 12 weeks. |
-| **Goals** | Say what moves a goal (focus time, tasks, calendar, calls, a number) and Nook counts it. |
+| **Goals** | Say what moves a goal (focus time, tasks, calendar, calls, a number) and Deepcus counts it. |
 | **Vision** | A board of pictures and words for what you are working for. |
 | **Progress** | How much you focused this week, month and year, tasks done and habits kept. |
-| **Time tracking** | Nook can note which app is in front while you work, so the day view shows where your time really went. Turn it off in Settings. |
+| **Time tracking** | Deepcus can note which app is in front while you work, so the day view shows where your time really went. Turn it off in Settings. |
 | **Soft sounds** | Pick a calm tone for when focus ends, when a break ends, and when you finish a task. |
-| **Updates itself** | When a new version is out, one click restarts Nook on it. No reinstall. |
+| **Updates itself** | When a new version is out, one click restarts Deepcus on it. No reinstall. |
 
 <table>
   <tr>
@@ -53,29 +53,29 @@ It is free, it has no ads, and your tasks stay on your own computer.
 
 ## Install
 
-1. Download **`Nook-Setup-x.y.z.exe`** from the [latest release](https://github.com/Liyan-Shanvel/Nook/releases/latest).
+1. Download **`Deepcus-Setup-x.y.z.exe`** from the [latest release](https://github.com/Liyan-Shanvel/Nook/releases/latest).
 2. Run it. No admin rights needed.
 3. Sign in with Google to see your calendar, or click **Use without an account**.
 
-> **"Windows protected your PC"?** Nook is new and not code-signed yet. Click **More info**, then **Run anyway**.
+> **"Windows protected your PC"?** Deepcus is new and not code-signed yet. Click **More info**, then **Run anyway**.
 >
-> **"Google hasn't verified this app"?** Nook only reads your calendar. Click **Advanced**, then **Go to Nook**.
+> **"Google hasn't verified this app"?** Deepcus only reads your calendar. Click **Advanced**, then **Go to Deepcus**.
 
 ## Your data
 
 - Tasks, habits, goals and history live in one file on your PC: `%LOCALAPPDATA%\FocusOS\focusos.db`.
-- Nook has no server. Nothing is uploaded.
+- Deepcus has no server. Nothing is uploaded.
 - Google access is read only, and only for your calendar. Sign out in Settings at any time.
 - The app tracker notes which app is in front while you work. That data never leaves your PC.
 
-## Use Nook with Claude
+## Use Deepcus with Claude
 
-Nook can be driven by an AI helper. While Nook is open it listens on `127.0.0.1:47811` (your PC only, never the internet). Every call needs the key in `%LOCALAPPDATA%\FocusOS\agent_token.txt`.
+Deepcus can be driven by an AI helper. While Deepcus is open it listens on `127.0.0.1:47811` (your PC only, never the internet). Every call needs the key in `%LOCALAPPDATA%\FocusOS\agent_token.txt`.
 
 **Claude Code:** add the MCP bridge once, then just ask ("add a call with Sam at 3pm", "what is left today?").
 
 ```
-claude mcp add nook -s user -- py C:\path\to\Nook\nook_mcp.py
+claude mcp add nook -s user -- py C:\path\to\Deepcus\nook_mcp.py
 ```
 
 **Any other bot or script on this PC:** plain HTTP.
@@ -88,7 +88,7 @@ POST /v1/tools/<tool>   {json args}  header: Authorization: Bearer <key>
 
 Tools: `get_today`, `list_tasks`, `list_unfinished`, `add_task`, `update_task`, `delete_task`, `move_unfinished_to_today`, `list_habits`, `add_habit`, `tick_habit`, `list_goals`, `goal_detail`, `add_goal`, `update_goal`, `log_goal`, `calendar`, `focus_minutes`, `timer_status`, `start_focus`, `pause_focus`.
 
-Anyone with the key can change your tasks, so keep it private. To make a new key, close Nook, delete the file and open Nook again.
+Anyone with the key can change your tasks, so keep it private. To make a new key, close Deepcus, delete the file and open Deepcus again.
 
 ## Build from source
 
@@ -97,8 +97,8 @@ Needs Python 3.13 and [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 ```powershell
 pip install pywebview pystray pillow pytest pyinstaller google-auth-oauthlib
 py -m pytest -q tests          # run the tests
-py app.py                      # run Nook without installing
-powershell -File build\build.ps1   # build dist\Nook-Setup-<version>.exe
+py app.py                      # run Deepcus without installing
+powershell -File build\build.ps1   # build dist\Deepcus-Setup-<version>.exe
 ```
 
 Google sign-in needs your own OAuth desktop client saved as `google_client.json` in the project folder. It is never committed.
@@ -124,7 +124,7 @@ Bug reports and ideas are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md
 
 ## License
 
-Nook is **free for personal and noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Deepcus is **free for personal and noncommercial use** under the [PolyForm Noncommercial License 1.0.0](LICENSE).
 
 You can use it, share it, study the code and change it. You can't sell it or use it to make money. For commercial use, open an issue to ask.
 

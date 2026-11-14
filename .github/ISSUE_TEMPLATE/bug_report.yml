@@ -1,11 +1,11 @@
 name: Bug report
-description: Something in Nook is broken or behaves wrong
+description: Something in Deepcus is broken or behaves wrong
 labels: [bug]
 body:
   - type: input
     id: version
     attributes:
-      label: Nook version
+      label: Deepcus version
       description: Settings, bottom of the page
       placeholder: "1.1.1"
     validations:

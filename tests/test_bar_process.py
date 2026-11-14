@@ -19,5 +19,5 @@ def test_data_dir_follows_the_override(monkeypatch, tmp_path):
 
 def test_names_shared_with_the_app():
     import app
-    assert bar.SHOW_EVENT == app.SHOW_EVENT           # the bar's "open Nook" pokes the app's event
+    assert bar.SHOW_EVENT == app.SHOW_EVENT           # the bar's "open Deepcus" pokes the app's event
     assert bar.BAR_MUTEX and bar.QUIT_EVENT

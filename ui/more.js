@@ -228,7 +228,7 @@ function renderModal() {
       <div class="set"><span>App categories</span><button class="more" data-act="mrules">Edit ›</button></div>
       ${sw('autostart', 'Start with Windows', m.autostart)}
       ${m.hidden ? `<div class="set"><span>Hidden calendar events</span><button class="more" data-act="showall">${m.hidden} · Show all</button></div>` : ''}
-      ${S.upd && S.upd.current ? `<div class="help" style="margin-top:14px">Nook ${esc(S.upd.current)}</div>` : ''}
+      ${S.upd && S.upd.current ? `<div class="help" style="margin-top:14px">Deepcus ${esc(S.upd.current)}</div>` : ''}
       <div class="btns"><button class="btn main" data-act="mclose">Done</button></div>`;
   } else if (m.kind === 'sounds') {
     const pick = S.settings.sound_pick || {};
@@ -363,7 +363,7 @@ const MORE_ACT = {
   mnote: el => { closeMenu(); S.note = Number(el.dataset.id); S.refocus = '#noteta'; render(); },
   mmove: async el => { const t = findTask(el.dataset.id); closeMenu(); if (!t) return; await call('update_task', t.id, { day: addDays(t.day, 1) }); load(); },
   mdup: async el => { closeMenu(); await call('duplicate_task', Number(el.dataset.id)); load(); },
-  mhide: async el => { closeMenu(); await call('hide_event', el.dataset.id); load(); toast('Hidden in Nook. It stays in Google Calendar.'); },
+  mhide: async el => { closeMenu(); await call('hide_event', el.dataset.id); load(); toast('Hidden in Deepcus. It stays in Google Calendar.'); },
   showall: async () => { await call('show_all_events'); S.modal.hidden = 0; renderModal(); },
 };
 Object.assign(ACT, MORE_ACT);
@@ -377,7 +377,7 @@ document.addEventListener('contextmenu', e => {
   e.preventDefault();
   const m = $('#menu');
   if (meet) {
-    m.innerHTML = `<button data-act="mhide" data-id="${esc(meet.dataset.meet)}"><i></i>Hide in Nook</button><span class="mnote">It stays in your Google Calendar.</span>`;
+    m.innerHTML = `<button data-act="mhide" data-id="${esc(meet.dataset.meet)}"><i></i>Hide in Deepcus</button><span class="mnote">It stays in your Google Calendar.</span>`;
   } else {
     const t = findTask(el.dataset.id); if (!t) return;
     const gs = Object.entries(S.goalNames);
@@ -434,7 +434,7 @@ function loginHTML(a) {
   const busy = a && a.busy;
   return `<div class="login">
     <img class="lmark" src="logo.png" width="64" height="64" alt="">
-    <h1>Nook</h1>
+    <h1 class="brand">deep<i>cus</i></h1>
     <p class="sub">Your day, one focus at a time.</p>
     <button class="gbtn" data-act="signin" ${busy ? 'disabled' : ''}>${busy ? 'Finish signing in in your browser…' : GLOGO + 'Continue with Google'}</button>
     ${a && a.error ? `<div class="lerr">${esc(a.error)}</div>` : ''}

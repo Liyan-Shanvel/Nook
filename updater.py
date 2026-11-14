@@ -1,8 +1,8 @@
 """Self-update from GitHub Releases.
 
 Every 6 hours (first check 1 minute after start): read the latest release of REPO. If its tag (vX.Y.Z)
-is newer than VERSION, download its Nook-Setup-*.exe in the background, check the size and the
-SHA-256 published next to it (Nook-Setup-*.exe.sha256), then tell the app "ready". The person
+is newer than VERSION, download its Deepcus-Setup-*.exe in the background, check the size and the
+SHA-256 published next to it (Deepcus-Setup-*.exe.sha256), then tell the app "ready". The person
 clicks "Restart to update": the installer runs silently, replaces the app, and opens it again.
 Their data (%LOCALAPPDATA%\\FocusOS) is never touched by an update.
 """
@@ -19,7 +19,7 @@ from version import REPO, VERSION
 
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 EVERY = 3600                     # check every hour
-UA = {"User-Agent": "Nook-updater", "Accept": "application/vnd.github+json"}
+UA = {"User-Agent": "Deepcus-updater", "Accept": "application/vnd.github+json"}
 
 
 def parse(v):
@@ -59,7 +59,8 @@ class Updater:
             if not newer(tag):
                 return False
             assets = {a["name"]: a for a in rel.get("assets", [])}
-            exe = next((a for n, a in assets.items() if n.startswith("Nook-Setup-") and n.endswith(".exe")), None)
+            exe = next((a for n, a in assets.items()
+                        if n.startswith(("Deepcus-Setup-", "Nook-Setup-")) and n.endswith(".exe")), None)
             sha = assets.get(exe["name"] + ".sha256") if exe else None
             if not exe or not sha:
                 raise RuntimeError("release has no installer or checksum")
