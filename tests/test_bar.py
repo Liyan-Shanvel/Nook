@@ -69,3 +69,24 @@ def test_mode_length_tasks(tmp_path):
     f.clear_done()
     f.save()
     assert f.todos == [] and s.task(tid)["done"]   # hidden on the bar only, still done in the app
+
+
+def test_bar_rebuilds_when_the_taskbar_colour_was_read_wrong(monkeypatch):
+    """2026-11-15: the bar read the taskbar colour while Windows was still drawing; every pill showed grey."""
+    reads = iter([(30, 30, 32)] * 3 + [(70, 85, 105)] * 20)
+    monkeypatch.setattr(bar, "sample_taskbar_colour", lambda x, y: next(reads))
+    w = type("W", (), {})()
+    w.geo, w.H, w.base, w.hidden, w.fs, w.popup = (1920, 1080, 48), 48, (30, 30, 32), False, 0, None
+    tick = lambda: bar.Widget.tint_changed(w)  # noqa: E731
+    seen = [tick() for _ in range(15)]          # one read every 5 ticks: 3 reads, all matching the key
+    assert not any(seen)
+    w.base = (25, 25, 28)                       # now the key is wrong vs the real colour (70, 85, 105)
+    seen = [tick() for _ in range(15)]
+    assert seen[-1] and not any(seen[:-1])      # rebuild only after three matching reads
+
+
+def test_a_popup_covering_the_corner_does_not_trigger_a_rebuild(monkeypatch):
+    monkeypatch.setattr(bar, "sample_taskbar_colour", lambda x, y: (200, 200, 200))
+    w = type("W", (), {})()
+    w.geo, w.H, w.base, w.hidden, w.fs, w.popup = (1920, 1080, 48), 48, (30, 30, 32), False, 0, object()
+    assert not any(bar.Widget.tint_changed(w) for _ in range(30))

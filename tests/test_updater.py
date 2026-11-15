@@ -1,3 +1,4 @@
+import os
 import hashlib
 import json
 
@@ -58,3 +59,13 @@ def test_offline_is_not_a_crash(tmp_path):
         raise OSError("no network")
     u = updater.Updater(str(tmp_path), fetch=fetch)
     assert u.check() is False and "no network" in u.status()["error"]
+
+
+def test_tidy_removes_installers_already_moved_past(tmp_path, monkeypatch):
+    monkeypatch.setattr(updater, "VERSION", "1.3.2")
+    up = updater.Updater(str(tmp_path))
+    os.makedirs(up.dir)
+    for n in ("Nook-Setup-1.1.4.exe", "Deepcus-Setup-1.3.2.exe", "Deepcus-Setup-1.3.3.exe", "notes.txt"):
+        open(os.path.join(up.dir, n), "w").close()
+    up.tidy()
+    assert sorted(os.listdir(up.dir)) == ["Deepcus-Setup-1.3.3.exe", "notes.txt"]

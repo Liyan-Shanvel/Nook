@@ -630,6 +630,8 @@ class Widget:
                 return self.rebuild("window gone")
             if screen_geometry() != self.geo:
                 return self.rebuild("screen changed")
+            if self.tint_changed():
+                return self.rebuild("taskbar colour changed")
             self._tick()
             self.errors = 0
         except Exception:
@@ -640,6 +642,23 @@ class Widget:
                 return self.rebuild("10 bad ticks")
         if not self.dead:
             self.root.after(1000, self.tick)
+
+    def tint_changed(self):
+        """The bar is see-through by one key colour: the taskbar colour read once at start. Read too early
+        (after an update the bar started while Windows was still drawing), every pill showed as a grey box
+        (2026-11-15). So read it again every 5 s; three matching reads that differ from the key = rebuild."""
+        self.tint_t = getattr(self, "tint_t", 0) + 1
+        if self.tint_t % 5 or self.hidden or self.fs or self.popup:
+            return False
+        sw, sh, tb_h = self.geo
+        c = sample_taskbar_colour(int(4 * S), sh - self.H // 2)
+        if max(abs(a - b) for a, b in zip(c, self.base)) <= 6:
+            self.tint_n = 0
+            return False
+        last = getattr(self, "tint_last", None)
+        same = last is not None and max(abs(a - b) for a, b in zip(c, last)) <= 6
+        self.tint_last, self.tint_n = c, (getattr(self, "tint_n", 0) + 1 if same else 1)
+        return self.tint_n >= 3
 
     def _tick(self):
         self.attach()

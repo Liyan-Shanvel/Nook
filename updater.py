@@ -92,7 +92,22 @@ class Updater:
                 h.update(chunk)
         return h.hexdigest()
 
+    def tidy(self):
+        """Delete installers this app has already moved past (each is ~29 MB; five had piled up by 1.3.2)."""
+        try:
+            names = os.listdir(self.dir)
+        except OSError:
+            return
+        for n in names:
+            m = re.match(r"^(?:Deepcus|Nook)-Setup-(\d+\.\d+\.\d+)\.exe(?:\.part)?$", n)
+            if m and not newer(m.group(1)):
+                try:
+                    os.remove(os.path.join(self.dir, n))
+                except OSError:
+                    pass
+
     def loop(self, first=5):
+        self.tidy()
         time.sleep(first)
         while True:
             self.check()
