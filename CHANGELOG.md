@@ -2,6 +2,11 @@
 
 All notable changes to Deepcus (called Nook before 1.3.0). Newest first.
 
+## 1.3.3 (2026-11-15)
+
+- **Fixed: grey boxes in the taskbar bar after an update.** The bar now checks the taskbar colour every few seconds and corrects itself, so its items stay see-through.
+- Old update files are cleaned up, freeing about 30 MB per past update.
+
 ## 1.3.2 (2026-11-14)
 
 - **Calendar moves like Google Calendar.** A Today button, then back and next arrows, then the date. The arrows step a day, a week or a month, so planning any day ahead is a few clicks. The view switch now reads Day, Week, Month.
