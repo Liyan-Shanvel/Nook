@@ -71,22 +71,19 @@ def test_mode_length_tasks(tmp_path):
     assert f.todos == [] and s.task(tid)["done"]   # hidden on the bar only, still done in the app
 
 
-def test_bar_rebuilds_when_the_taskbar_colour_was_read_wrong(monkeypatch):
-    """2026-11-15: the bar read the taskbar colour while Windows was still drawing; every pill showed grey."""
-    reads = iter([(30, 30, 32)] * 3 + [(70, 85, 105)] * 20)
-    monkeypatch.setattr(bar, "sample_taskbar_colour", lambda x, y: next(reads))
-    w = type("W", (), {})()
-    w.geo, w.H, w.base, w.hidden, w.fs, w.popup = (1920, 1080, 48), 48, (30, 30, 32), False, 0, None
-    tick = lambda: bar.Widget.tint_changed(w)  # noqa: E731
-    seen = [tick() for _ in range(15)]          # one read every 5 ticks: 3 reads, all matching the key
-    assert not any(seen)
-    w.base = (25, 25, 28)                       # now the key is wrong vs the real colour (70, 85, 105)
-    seen = [tick() for _ in range(15)]
-    assert seen[-1] and not any(seen[:-1])      # rebuild only after three matching reads
-
-
-def test_a_popup_covering_the_corner_does_not_trigger_a_rebuild(monkeypatch):
-    monkeypatch.setattr(bar, "sample_taskbar_colour", lambda x, y: (200, 200, 200))
-    w = type("W", (), {})()
-    w.geo, w.H, w.base, w.hidden, w.fs, w.popup = (1920, 1080, 48), 48, (30, 30, 32), False, 0, object()
-    assert not any(bar.Widget.tint_changed(w) for _ in range(30))
+def test_matte_gives_each_pixel_its_own_see_through_amount():
+    """2026-11-15/16: a guessed taskbar colour showed the pills as grey, then white boxes. The bar now
+    carries its own alpha, worked out from one frame drawn over black and over white."""
+    from PIL import Image
+    src = [(255, 255, 255, 255), (255, 255, 255, 0), (255, 255, 255, 2), (200, 120, 40, 128)]
+    def over(bg):
+        return [tuple(round(bg + (c - bg) * a / 255) for c in (r, g, b)) for r, g, b, a in src]
+    dark, light = (Image.new("RGB", (4, 1)) for _ in range(2))
+    dark.putdata(over(0)); light.putdata(over(255))
+    out = bar.matte(dark, light)
+    px = [tuple(out[i:i + 4]) for i in range(0, 16, 4)]          # B, G, R, A premultiplied
+    assert px[0] == (255, 255, 255, 255)                         # solid text: fully shown
+    assert px[1] == (0, 0, 0, 0)                                 # empty: the taskbar shows through
+    assert px[2][3] == 2                                         # resting pill: unseen, still catches the mouse
+    assert abs(px[3][3] - 128) <= 1 and abs(px[3][2] - 100) <= 1  # half see-through colour, premultiplied
+    assert all(max(p[:3]) <= p[3] for p in px)                   # never brighter than its alpha

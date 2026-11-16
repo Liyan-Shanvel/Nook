@@ -18,7 +18,7 @@ import urllib.request
 import webbrowser
 import winsound
 
-from PIL import Image, ImageDraw, ImageFont, ImageTk
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageTk
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -41,6 +41,7 @@ FG2_A, FG3_A = 0.55, 0.45     # muted text, faint text
 TRACK_A = 0.14                # bar ring track
 WEEK_A = 0.55                 # week ring / weekly bar
 HOVER_A = 0.10                # hover pill on bar + popup buttons
+PLATE_A = 0.006               # a pill at rest: unseen (alpha 2 of 255) but solid enough to catch the mouse
 PAD_X, GAP_ITEMS, GAP_IN, GAP_USAGE = 14, 22, 6, 8
 CARD = (31, 31, 33)           # popup card (rgba(32,32,34,.86) over a dark desktop)
 ALERT_STEPS = [70, 80, 90, None]
@@ -113,13 +114,58 @@ def screen_geometry():
     return sw, sh, sh - work.bottom
 
 
-def sample_taskbar_colour(x, y):
-    hdc = user32.GetDC(0)
-    c = gdi32.GetPixel(hdc, x, y)
-    user32.ReleaseDC(0, hdc)
-    if c == 0xFFFFFFFF:
-        return (28, 28, 28)
-    return (c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF)
+def matte(on_black, on_white):
+    """Two renders of one frame, over black and over white, give its exact see-through version:
+    alpha = 255 - (white - black), and the black render is already the colour times alpha.
+    Returns BGRA bytes, premultiplied, the way Windows wants them for a layered window."""
+    diff = ImageChops.subtract(on_white, on_black)
+    alpha = ImageChops.invert(ImageChops.lighter(ImageChops.lighter(*diff.split()[:2]), diff.split()[2]))
+    r, g, b = (ImageChops.darker(c, alpha) for c in on_black.split())
+    return Image.merge("RGBA", (b, g, r, alpha)).tobytes()
+
+
+class _BLEND(ctypes.Structure):
+    _fields_ = [("op", ctypes.c_ubyte), ("flags", ctypes.c_ubyte), ("alpha", ctypes.c_ubyte), ("fmt", ctypes.c_ubyte)]
+
+
+class _BMI(ctypes.Structure):
+    _fields_ = [("size", wt.DWORD), ("w", wt.LONG), ("h", wt.LONG), ("planes", wt.WORD), ("bits", wt.WORD),
+                ("comp", wt.DWORD), ("img", wt.DWORD), ("xppm", wt.LONG), ("yppm", wt.LONG),
+                ("used", wt.DWORD), ("imp", wt.DWORD)]
+
+
+def make_layered(hwnd):
+    style = user32.GetWindowLongW(hwnd, -20)
+    user32.SetWindowLongW(hwnd, -20, style | 0x80000)  # WS_EX_LAYERED
+
+
+def show_layered(hwnd, w, h, bgra):
+    """Put a premultiplied BGRA frame on a layered window. Each pixel carries its own see-through amount,
+    so the bar never guesses the taskbar colour (a guessed colour showed as grey or white boxes, 11-15/16)."""
+    vp = ctypes.c_void_p
+    screen = user32.GetDC(None)
+    mem = gdi32.CreateCompatibleDC(vp(screen))
+    bmi = _BMI(ctypes.sizeof(_BMI), w, -h, 1, 32, 0, 0, 0, 0, 0, 0)
+    bits = vp()
+    gdi32.CreateDIBSection.restype = vp
+    dib = gdi32.CreateDIBSection(vp(mem), ctypes.byref(bmi), 0, ctypes.byref(bits), None, 0)
+    gdi32.SelectObject.restype = vp
+    try:
+        if not dib or not bits:
+            return False
+        ctypes.memmove(bits, bgra, w * h * 4)
+        old = gdi32.SelectObject(vp(mem), vp(dib))
+        size, src = wt.SIZE(w, h), wt.POINT(0, 0)
+        blend = _BLEND(0, 0, 255, 1)  # AC_SRC_OVER, full opacity, AC_SRC_ALPHA
+        ok = user32.UpdateLayeredWindow(vp(hwnd), vp(screen), None, ctypes.byref(size), vp(mem),
+                                        ctypes.byref(src), 0, ctypes.byref(blend), 2)  # ULW_ALPHA
+        gdi32.SelectObject(vp(mem), vp(old))
+        return bool(ok)
+    finally:
+        if dib:
+            gdi32.DeleteObject(vp(dib))
+        gdi32.DeleteDC(vp(mem))
+        user32.ReleaseDC(None, vp(screen))
 
 
 def fullscreen_state():
@@ -492,19 +538,12 @@ class Widget:
         if tb_h <= 0:
             tb_h = int(48 * s)
         self.H, self.W = tb_h, int(560 * s)
-        self.base = sample_taskbar_colour(int(4 * s), sh - tb_h // 2)
-        # the hover pill's resting colour: one step off the key, so it is invisible but still catches the mouse
-        b = self.base
-        self.plate = (b[0], b[1], b[2] + 1 if b[2] < 255 else b[2] - 1)
-
-        key = "#%02x%02x%02x" % self.base
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
-        self.root.configure(bg=key)
-        self.root.attributes("-transparentcolor", key)
+        self.root.configure(bg="black")
         self.root.geometry(f"{self.W}x{self.H}+0+{sh - tb_h}")
-        self.label = tk.Label(self.root, bd=0, bg=key)
-        self.label.pack()
+        self.label = tk.Label(self.root, bd=0, bg="black")
+        self.label.pack(fill="both", expand=True)
 
         self.label.bind("<Button-1>", self.on_click)
         self.label.bind("<Button-3>", lambda e: self.open_app())
@@ -514,6 +553,7 @@ class Widget:
         self.root.update_idletasks()
         self.hwnd = hwnd_of(self.label)
         no_activate(self.hwnd)
+        make_layered(self.hwnd)
         self.tray = None
         self.fs = 0
         self.attach()
@@ -630,8 +670,6 @@ class Widget:
                 return self.rebuild("window gone")
             if screen_geometry() != self.geo:
                 return self.rebuild("screen changed")
-            if self.tint_changed():
-                return self.rebuild("taskbar colour changed")
             self._tick()
             self.errors = 0
         except Exception:
@@ -642,23 +680,6 @@ class Widget:
                 return self.rebuild("10 bad ticks")
         if not self.dead:
             self.root.after(1000, self.tick)
-
-    def tint_changed(self):
-        """The bar is see-through by one key colour: the taskbar colour read once at start. Read too early
-        (after an update the bar started while Windows was still drawing), every pill showed as a grey box
-        (2026-11-15). So read it again every 5 s; three matching reads that differ from the key = rebuild."""
-        self.tint_t = getattr(self, "tint_t", 0) + 1
-        if self.tint_t % 5 or self.hidden or self.fs or self.popup:
-            return False
-        sw, sh, tb_h = self.geo
-        c = sample_taskbar_colour(int(4 * S), sh - self.H // 2)
-        if max(abs(a - b) for a, b in zip(c, self.base)) <= 6:
-            self.tint_n = 0
-            return False
-        last = getattr(self, "tint_last", None)
-        same = last is not None and max(abs(a - b) for a, b in zip(c, last)) <= 6
-        self.tint_last, self.tint_n = c, (getattr(self, "tint_n", 0) + 1 if same else 1)
-        return self.tint_n >= 3
 
     def _tick(self):
         self.attach()
@@ -738,9 +759,19 @@ class Widget:
         return bold, (muted if err == "Busy, retrying" else (err or muted)), five   # a throttle keeps the time left
 
     def render(self):
-        s, W, H, base = S, self.W, self.H, self.base
+        """Draw the frame over black and over white; the difference is each pixel's see-through amount."""
+        dark, light = self.frame((0, 0, 0)), self.frame((255, 255, 255))
+        if os.environ.get("WIDGET_SNAPSHOT") and not getattr(self, "_snapped", False) and self.bar_text()[2] \
+                and abs(self.shown["five"] - self.bar_text()[2][0]) < 0.2:
+            self.frame((28, 28, 28)).save(os.environ["WIDGET_SNAPSHOT"]); self._snapped = True
+        self.last_img = dark
+        if not show_layered(self.hwnd, self.W, self.H, matte(dark, light)):
+            raise OSError("UpdateLayeredWindow failed")
+
+    def frame(self, base):
+        s, W, H = S, self.W, self.H
         fg2, track, week_c = over(base, FG2_A), over(base, TRACK_A), over(base, WEEK_A)
-        hover_c = over(base, HOVER_A)
+        plate = over(base, PLATE_A)
         cy = H / 2
         f_b, f_m = font(13, 600), font(13, 400)
         top, bot = self.pill_box()
@@ -771,7 +802,7 @@ class Widget:
         big = Image.new("RGB", (W * SS, H * SS), base)
         g = ImageDraw.Draw(big)
         for k, (a, b) in self.spans.items():
-            rrect(g, a, top, b, bot, 8 * s, self.plate)
+            rrect(g, a, top, b, bot, 8 * s, plate)
         rcx = ring_x + 14 * s
         for r, pct, col in ((11, self.shown["week"], week_c), (6.5, self.shown["five"], FG)) if self.has_claude else ():
             ring(g, rcx, cy, r * s, 3.5 * s, track)
@@ -806,13 +837,7 @@ class Widget:
             d.text((c_mx, cy), c_muted, font=f_m, fill=fg2, anchor="lm")
         d.text((f_tx, cy), f_bold, font=f_b, fill=f_fg, anchor="lm")
         d.text((f_mx, cy), f_muted, font=f_m, fill=f_fg2, anchor="lm")
-
-        if os.environ.get("WIDGET_SNAPSHOT") and not getattr(self, "_snapped", False) and five \
-                and abs(self.shown["five"] - five[0]) < 0.2:
-            img.save(os.environ["WIDGET_SNAPSHOT"]); self._snapped = True
-        self.last_img = img
-        self.photo = ImageTk.PhotoImage(img, master=self.root)
-        self.label.configure(image=self.photo)
+        return img
 
     def write_status(self):
         try:
