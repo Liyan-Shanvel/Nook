@@ -2,6 +2,10 @@
 
 All notable changes to Deepcus (called Nook before 1.3.0). Newest first.
 
+## 1.4.1 (2026-11-17)
+
+- **New look: the Deepcus logo is now "steps".** Warm ember blocks stacking up, one for each focus session. You see it on the taskbar, the Start menu, the tray and the sign-in screen.
+
 ## 1.4.0 (2026-11-17)
 
 - **New: Notes tab.** A quick place for links, call prep and anything you want to keep. Search, pin, and it saves as you type. Type `#` for a heading, `-` for a list, `[]` for a checkbox. Paste a link and it becomes a card with the page's title; click it to open.
