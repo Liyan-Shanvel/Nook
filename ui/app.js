@@ -106,6 +106,7 @@ function render() {
   const keep = $('.tlwrap') ? $('.tlwrap').scrollTop : null;
   if (S.tab === 'today') m.innerHTML = todayHTML();
   else if (S.tab === 'calendar') m.innerHTML = S.view === 'day' ? calDayHTML() : S.view === 'week' ? weekHTML() : monthHTML();
+  else if (S.tab === 'notes') notesRender(m);
   else {
     const pg = $('.page'), keepY = pg && S.lastTab === S.tab + S.habit + S.goal ? pg.scrollTop : 0;
     m.innerHTML = moreHTML();
@@ -120,7 +121,7 @@ function render() {
 }
 
 function renderTop() {
-  const tabs = ['Today', 'Calendar', 'Habits', 'Goals', 'Vision', 'Progress'];
+  const tabs = ['Today', 'Calendar', 'Notes', 'Habits', 'Goals', 'Vision', 'Progress'];
   let date = shortDay(S.today), right = '', nav = '';
   if (S.tab === 'calendar') {
     if (S.view === 'week') {

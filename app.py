@@ -4,6 +4,7 @@ bar (`--bar`, started by this one and kept alive), so a stuck window never blank
 Flags: --hidden (start without the window, used by Start with Windows), --bar (the taskbar bar only)."""
 import ctypes
 import os
+import re
 import sys
 import threading
 import time
@@ -32,6 +33,41 @@ DATA = os.environ.get("FOCUSOS_DATA") or os.path.join(os.environ.get("LOCALAPPDA
 OLD_DATA = os.path.join(HERE, "data")         # where the dev copy kept it before 2026-11-11
 LOG = os.path.join(DATA, "error.log")
 ICON = os.path.join(RES, "build", "focusos.ico") if not FROZEN else os.path.join(RES, "focusos.ico")
+
+
+def link_title(url, timeout=4):
+    url = str(url or "").strip()
+    if not re.match(r"^https?://", url, re.I):
+        return ""
+    import html
+    import json as _json
+    import urllib.parse
+    import urllib.request
+    if re.match(r"^https?://([a-z0-9-]+\.)?(youtube\.com|youtu\.be)/", url, re.I):   # its page is huge, oEmbed is not
+        try:
+            o = "https://www.youtube.com/oembed?format=json&url=" + urllib.parse.quote(url, safe="")
+            with urllib.request.urlopen(o, timeout=timeout) as r:
+                return str(_json.loads(r.read(64 * 1024)).get("title") or "")[:140]
+        except Exception:
+            return ""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                                   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36",
+                                                   "Accept-Language": "en"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            if "html" not in (r.headers.get("Content-Type") or "html"):
+                return ""
+            raw = r.read(1024 * 1024)
+            cs = r.headers.get_content_charset() or "utf-8"
+        page = raw.decode(cs, errors="replace")
+    except Exception:
+        return ""
+    m = (re.search(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)', page, re.I)
+         or re.search(r"<title[^>]*>(.*?)</title>", page, re.I | re.S))
+    if not m:
+        return ""
+    t = re.sub(r"\s+", " ", html.unescape(m.group(1))).strip()
+    return t[:140]
 
 
 def log_error(where):
@@ -269,6 +305,43 @@ class Api:
 
     def update_vision(self, vid, fields):
         return self._s.update_vision(int(vid), fields)
+
+    # notes (1.4)
+    def notes_data(self, nid=None):
+        s = self._s
+        notes = s.notes()
+        note = None
+        if nid is not None:
+            try:
+                note = s.note(int(nid))
+            except KeyError:
+                note = None
+        if note is None and notes:
+            note = s.note(notes[0]["id"])
+        return {"today": s.today(), "notes": notes, "note": note, "settings": s.settings()}
+
+    def add_note(self):
+        return self._s.add_note()
+
+    def save_note(self, nid, fields):
+        return self._s.save_note(int(nid), fields)
+
+    def delete_note(self, nid):
+        self._s.delete_note(int(nid))
+        return True
+
+    def open_url(self, url):
+        """A link in a note opens in the normal browser. Only web links."""
+        url = str(url or "").strip()
+        if not re.match(r"^https?://", url, re.I):
+            return False
+        import webbrowser
+        webbrowser.open(url)
+        return True
+
+    def link_title(self, url):
+        """The page's <title> for a pasted link, so the card says what it is. Empty when it cannot tell."""
+        return link_title(url)
 
     def delete_vision(self, vid):
         self._s.delete_vision(int(vid))
@@ -519,13 +592,29 @@ def main():
                                 hidden=hidden)
     state = {"quitting": False, "visible": not hidden}
 
+    def to_front():
+        """Raise the window on ITS OWN thread. Never set `win.on_top` from a worker thread: pywebview sets
+        Form.TopMost directly, pythonnet keeps the GIL during a property set, the UI thread needs the GIL
+        for its 500 ms timer, and both wait forever = "Not Responding" (hang.log 2026-11-15: wait_show
+        stuck in set_on_top). Invoke is a method call, so pythonnet lets go of the GIL while it waits."""
+        from webview.platforms.winforms import BrowserView
+        from System import Func, Type
+        form = BrowserView.instances.get(win.uid)
+        if not form:
+            return
+
+        def front():
+            form.TopMost = True
+            form.TopMost = False
+            form.Activate()
+        form.Invoke(Func[Type](front))
+
     def show():
         try:
             state["visible"] = True
             win.show()
             win.restore()
-            win.on_top = True
-            win.on_top = False
+            to_front()
         except Exception:
             log_error("show")
 

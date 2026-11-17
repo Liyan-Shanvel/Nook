@@ -2,6 +2,11 @@
 
 All notable changes to Deepcus (called Nook before 1.3.0). Newest first.
 
+## 1.4.0 (2026-11-17)
+
+- **New: Notes tab.** A quick place for links, call prep and anything you want to keep. Search, pin, and it saves as you type. Type `#` for a heading, `-` for a list, `[]` for a checkbox. Paste a link and it becomes a card with the page's title; click it to open.
+- **Fixed for good: "Deepcus is not responding".** Opening the window from the taskbar bar or the tray could freeze it forever. The window is now brought forward the safe way. As a backup, the taskbar bar now restarts Deepcus by itself if the window ever stops answering for a minute.
+
 ## 1.3.4 (2026-11-16)
 
 - **Fixed for good: white or grey boxes in the taskbar bar.** The bar used to guess the taskbar's colour and hide everything of that colour; a wrong guess showed boxes. Now every pixel of the bar carries its own see-through amount, so there is nothing to guess. It looks right on any taskbar colour, light or dark, after updates and Windows changes.

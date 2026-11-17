@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS vision(
   id INTEGER PRIMARY KEY, kind TEXT NOT NULL, file TEXT, text TEXT NOT NULL DEFAULT '',
   caption TEXT NOT NULL DEFAULT '', goal_id INTEGER, wide INTEGER NOT NULL DEFAULT 0,
   pos REAL NOT NULL DEFAULT 0, created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS note(
+  id INTEGER PRIMARY KEY, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0,
+  created REAL NOT NULL, updated REAL NOT NULL);
 """
 # What moves a goal. hand = you add it, linked = ticked tasks and habits you point at it,
 # tasks_word = ticked tasks with a word, focus_all = all focus time, focus_word = focus on linked
@@ -66,6 +70,7 @@ GOAL_COLS = [("source", "TEXT NOT NULL DEFAULT ''"), ("match", "TEXT NOT NULL DE
              ("why", "TEXT NOT NULL DEFAULT ''"), ("step", "REAL NOT NULL DEFAULT 1"),
              ("base", "REAL NOT NULL DEFAULT 0"), ("pos", "REAL NOT NULL DEFAULT 0")]
 VISION_MAX = 3 * 1024 * 1024
+NOTE_MAX = 2 * 1024 * 1024          # one note's page; a long note is ~50 KB, so this is only a guard
 
 # Rules match the APP name only (for a browser that is the site, e.g. "YouTube"), never the
 # window title: a code file called youtube_notes.md must not count as distracted.
@@ -1033,6 +1038,56 @@ class Store:
         d = os.path.join(self.dir, "vision")
         os.makedirs(d, exist_ok=True)
         return d
+
+    # ---------- notes (1.4): quick pages - links, call prep, anything to keep ----------
+    # body = the page's HTML (the page cleans it before saving and again before showing it);
+    # text = the same words as plain text, for the list preview and search.
+    def notes(self):
+        rows = self._all("SELECT id, title, substr(text, 1, 5000) AS text, pinned, created, updated "
+                         "FROM note ORDER BY pinned DESC, updated DESC, id DESC")
+        for r in rows:
+            r["pinned"] = bool(r["pinned"])
+        return rows
+
+    def note(self, nid):
+        r = self._all("SELECT * FROM note WHERE id=?", (nid,))
+        if not r:
+            raise KeyError(f"no note {nid}")
+        r[0]["pinned"] = bool(r[0]["pinned"])
+        return r[0]
+
+    def add_note(self, title="", body="", text=""):
+        now = self.clock()
+        with self.lock:
+            cur = self.db.execute("INSERT INTO note(title, body, text, created, updated) VALUES(?,?,?,?,?)",
+                                  (str(title or "")[:200], str(body or "")[:NOTE_MAX], str(text or "")[:NOTE_MAX],
+                                   now, now))
+            self.db.commit()
+            return self.note(cur.lastrowid)
+
+    def save_note(self, nid, fields):
+        """Change title/body/text/pinned. Only a change of words moves the note up the list."""
+        self.note(nid)
+        sets, args = [], []
+        for k, limit in (("title", 200), ("body", NOTE_MAX), ("text", NOTE_MAX)):
+            if k in fields:
+                v = str(fields[k] or "")
+                if len(v) > limit:
+                    raise ValueError("this note is too long")
+                sets.append(f"{k}=?")
+                args.append(v)
+        if sets:
+            sets.append("updated=?")
+            args.append(self.clock())
+        if "pinned" in fields:
+            sets.append("pinned=?")
+            args.append(1 if fields["pinned"] else 0)
+        if sets:
+            self._q(f"UPDATE note SET {', '.join(sets)} WHERE id=?", (*args, nid))
+        return self.note(nid)
+
+    def delete_note(self, nid):
+        self._q("DELETE FROM note WHERE id=?", (nid,))
 
     def vision(self):
         rows = self._all("SELECT * FROM vision ORDER BY pos, id")

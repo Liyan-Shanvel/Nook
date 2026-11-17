@@ -1491,6 +1491,78 @@ def open_main():
         subprocess.Popen(app_cmd(), creationflags=0x08000000, close_fds=True)
 
 
+def find_app_window(u, own_pid):
+    """The Deepcus main window (title 'Deepcus…', a WindowsForms class, another process). Hidden ones count."""
+    found = []
+    proc = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+
+    def cb(h, _):
+        p = wt.DWORD()
+        u.GetWindowThreadProcessId(h, ctypes.byref(p))
+        if p.value != own_pid:
+            t, c = ctypes.create_unicode_buffer(64), ctypes.create_unicode_buffer(64)
+            u.GetWindowTextW(h, t, 64)
+            u.GetClassNameW(h, c, 64)
+            if t.value.startswith("Deepcus") and c.value.startswith("WindowsForms"):
+                found.append((h, p.value))
+                return False
+        return True
+    u.EnumWindows(proc(cb), 0)
+    return found[0] if found else (None, None)
+
+
+def app_watch(d, every=10, limit=6, wait_ms=5000):
+    """Safety net from OUTSIDE the window's process: if the Deepcus window stops answering for ~1 minute
+    (6 checks in a row, 10 s apart, 5 s timeout each), write it to hang.log, end that process and start
+    Deepcus again. A frozen window cannot save itself, the bar can. Sleep/wake gaps reset the count."""
+    if not getattr(sys, "frozen", False) and not os.environ.get("DEEPCUS_APP_WATCH"):
+        return                                            # never kill a developer's run
+    u = ctypes.WinDLL("user32", use_last_error=True)
+    u.SendMessageTimeoutW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM, wt.UINT, wt.UINT,
+                                      ctypes.POINTER(ctypes.c_size_t)]
+    u.SendMessageTimeoutW.restype = ctypes.c_ssize_t
+    u.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+    u.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
+    u.GetClassNameW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.OpenProcess.restype = ctypes.c_void_p
+    k.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+    k.TerminateProcess.argtypes = [ctypes.c_void_p, wt.UINT]
+    k.WaitForSingleObject.argtypes = [ctypes.c_void_p, wt.DWORD]
+    k.CloseHandle.argtypes = [ctypes.c_void_p]
+    me, strikes, last = os.getpid(), 0, time.monotonic()
+    while True:
+        time.sleep(every)
+        try:
+            now = time.monotonic()
+            if now - last > every * 3:                    # the PC slept: start counting again
+                strikes = 0
+            last = now
+            hwnd, pid = find_app_window(u, me)
+            if not hwnd:
+                strikes = 0
+                continue
+            res = ctypes.c_size_t()
+            ok = u.SendMessageTimeoutW(hwnd, 0, 0, 0, 0x0002, wait_ms, ctypes.byref(res))   # WM_NULL
+            strikes = 0 if ok else strikes + 1
+            if strikes < limit:
+                continue
+            with open(os.path.join(d, "hang.log"), "a", encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} bar: Deepcus window (pid {pid}) silent for "
+                        f"{limit} checks, restarting it\n\n")
+            h = k.OpenProcess(0x0001 | 0x00100000, False, pid)        # TERMINATE | SYNCHRONIZE
+            if h:
+                k.TerminateProcess(h, 7)
+                k.WaitForSingleObject(h, 10000)
+                k.CloseHandle(h)
+            time.sleep(2)
+            subprocess.Popen(app_cmd(), creationflags=0x08000000, close_fds=True)
+            time.sleep(30)                                # give the new window time to come up
+            strikes, last = 0, time.monotonic()
+        except Exception:
+            log("app_watch")
+
+
 def main_process():
     """Entry for `Deepcus.exe --bar`. One bar per user; quits when Deepcus is quit from the tray."""
     k = _k32()
@@ -1527,4 +1599,5 @@ def main_process():
 
     threading.Thread(target=wait_quit, daemon=True).start()
     threading.Thread(target=watchdog, daemon=True).start()
+    threading.Thread(target=app_watch, args=(d,), daemon=True).start()
     run(store, d, open_main)

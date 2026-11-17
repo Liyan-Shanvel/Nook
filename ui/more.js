@@ -37,6 +37,7 @@ async function moreLoad() {
     return call('goals_data');
   }
   if (S.tab === 'vision') return call('vision_data');
+  if (S.tab === 'notes') return call('notes_data', S.noteId);
   if (S.prog === 'year') return call('year_data', (S.pdate || S.today).slice(0, 4));
   const [a, b] = progRange();
   return call('progress_data', a, b);
